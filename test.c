@@ -40,18 +40,9 @@ int main(int argc, char *argv[])
     cJSON *json = cJSON_Parse(json_input);
 
     const cJSON *name = NULL;
-    name = cJSON_GetObjectItemCaseSensitive(json, "Controllers");
+    name = cJSON_GetObjectItemCaseSensitive(json, "test");
 
-    const cJSON *items;
-    const cJSON *item;
-    cJSON_ArrayForEach(item, name->child)
-    {
-        if(cJSON_IsObject(item)){
-            printf("%s : %f \n", item->child->child->string, item->child->child->valuedouble);
-        }
-        // printf("%s : %s \n", item->string, item->valuestring);
-    }
-
+    printf(" %s %d\n", name->string, name->type);
 
     // const cJSON *name = NULL;
     // printf("name = %s\n", name->child->valuestring);

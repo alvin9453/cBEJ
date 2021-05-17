@@ -23,104 +23,139 @@ int16_t find_name_from_dictionary(char *name, EntryInfo_t *dict)
     return index;
 }
 
-void pack_json_to_sf(BejTuple_t *bej_tuple_list, int* index, const cJSON *json, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
+BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
 {
     // parse cjson data to bej_tuple
     // but still not fill the length
 
-    BejTuple_t bej_tuple;
     BejTupleS_t bejS;
     BejTupleF_t bejF;
+    void **bej_V;
     printf(" -- %s\n", json->string);
 
     const cJSON *obj = NULL;
 
-    switch (json->type)
+    if (json->type == cJSON_Object)
     {
-        case cJSON_Object:
-            printf(" cJSON Object \n");
-            pack_json_to_sf(bej_tuple_list, index, json->child, major_dict, annotation_dict);
-            break;
-        case cJSON_Array:
-            printf(" cJSON ARRAY \n");
-            cJSON_ArrayForEach(obj, json->child)
-            {
-                pack_json_to_sf(bej_tuple_list, index, obj, major_dict, annotation_dict);
-            }
-            break;
-        case cJSON_Number:
-        case cJSON_True:
-        case cJSON_False:
-        case cJSON_String:
-        default:
-            // printf(" -- json->type = %d\n", json->type);
-            break;
+        bej_V = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
+        int index = 0;
+        cJSON_ArrayForEach(obj, json)
+        {
+            bej_V[index++] = pack_json_to_sfv(obj, major_dict, annotation_dict);
+        }
+    }
+    else if (json->type == cJSON_Array)
+    {
+        int index = 0;
+        cJSON_ArrayForEach(obj, json)
+        {
+            bej_V = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
+            bej_V[index++] = pack_json_to_sfv(obj->child, major_dict, annotation_dict);
+        }
+    }
+    else
+    {
+        if (json->type == cJSON_String)
+        {
+            const char *json_string;
+            json_string = json->valuestring;
+            bej_V = malloc(1 * sizeof(json_string));
+            memcpy(bej_V, json_string, sizeof(json_string));
+        }
+        else if (json->type == cJSON_Number)
+        {
+            double *json_valuedouble_p;
+            double json_valuedouble = json->valuedouble;
+            json_valuedouble_p = &(json_valuedouble);
+            bej_V = malloc(1 * sizeof(double));
+            memcpy(bej_V, json_valuedouble_p, sizeof(json_valuedouble_p));
+        }
+        else if (cJSON_IsTrue(json))
+        {
+            int true_value = 0;
+            int *true_value_p;
+            true_value_p = &true_value;
+            bej_V = malloc(sizeof(int));
+            memcpy(bej_V, true_value_p, sizeof(true_value_p));
+        }
+        else if (cJSON_IsFalse(json))
+        {
+            int false_value = 0;
+            int *false_value_p;
+            false_value_p = &false_value;
+            bej_V = malloc(sizeof(int));
+            memcpy(bej_V, false_value_p, sizeof(false_value_p));
+        }
     }
 
-    // int16_t major_dict_child_index = find_name_from_dictionary(json->string, major_dict);
-    // if (major_dict_child_index > -1)
-    // {
-    //     // printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", major_dict->ChildInfo[major_dict_child_index]->Name, major_dict->ChildInfo[major_dict_child_index]->SequenceNumber);
-    //     bejS.seq = major_dict->ChildInfo[major_dict_child_index]->SequenceNumber;
-    //     bejS.name = major_dict->ChildInfo[major_dict_child_index]->Name;
-    //     bejS.annot_flag = 0;
-        
-        
-    //     // BejTupleF_t
-    //     // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(major_dict->ChildInfo[major_dict_child_index]->bejtype));
-    //     uint8_t bejtype = major_dict->ChildInfo[major_dict_child_index]->bejtype;
+    int16_t major_dict_child_index = find_name_from_dictionary(json->string, major_dict);
+    if (major_dict_child_index > -1)
+    {
+        // printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", major_dict->ChildInfo[major_dict_child_index]->Name, major_dict->ChildInfo[major_dict_child_index]->SequenceNumber);
+        bejS.seq = major_dict->ChildInfo[major_dict_child_index]->SequenceNumber;
+        bejS.name = major_dict->ChildInfo[major_dict_child_index]->Name;
+        bejS.annot_flag = 0;
 
-    //     bejF.bejtype = major_dict->ChildInfo[major_dict_child_index]->bejtype;
-    // }
+        // BejTupleF_t
+        // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(major_dict->ChildInfo[major_dict_child_index]->bejtype));
+        uint8_t bejtype = major_dict->ChildInfo[major_dict_child_index]->bejtype;
 
-    //     // Set annotation flag
-    // int16_t anno_dict_child_index = find_name_from_dictionary(json->string, annotation_dict);
-    // if (anno_dict_child_index > -1)
-    // {
-    //     // printf(" - [DEBUG] find \"%s\" is annotation. \n", annotation_dict->ChildInfo[anno_dict_child_index]->Name);
-    //     bejS.annot_flag = 1;
-    // }
+        bejF.bejtype = major_dict->ChildInfo[major_dict_child_index]->bejtype;
+    }
 
-    // if (major_dict_child_index == -1 && anno_dict_child_index == -1)
-    // {
-    //     // printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
-    //     return;
-    // }
+    // Set annotation flag
+    int16_t anno_dict_child_index = find_name_from_dictionary(json->string, annotation_dict);
+    if (anno_dict_child_index > -1)
+    {
+        printf(" - [DEBUG] find \"%s\" is annotation. \n", annotation_dict->ChildInfo[anno_dict_child_index]->Name);
+        bejS.seq = annotation_dict->ChildInfo[anno_dict_child_index]->SequenceNumber;
+        bejS.annot_flag = 1;
+    }
 
-    // bej_tuple.bejS = bejS;
-    // bej_tuple.bejF = bejF;
+    if (major_dict_child_index == -1 && anno_dict_child_index == -1)
+    {
+        printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
+        return NULL;
+    }else{
+        BejTuple_t *bej_tuple = malloc(sizeof(BejTuple_t));
+        bej_tuple->bejS = bejS;
+        bej_tuple->bejF = bejF;
+        bej_tuple->bejV = bej_V;
 
-    // bej_tuple_list[*index] = bej_tuple;
-
-    // (*index)++;
-
-    return;
+        return bej_tuple;
+    }
 }
 
-void encodeJsonToBinary(BejTuple_t *bej_tuple_list, const char *json_input, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
+void showTuple(BejTuple_t **bej_tuple, int count)
 {
-    cJSON *cjson_input = cJSON_Parse(json_input);
-
-    int i = 0;
-
-    const cJSON *obj = NULL;
-    // pack cjson to sfv
-    cJSON_ArrayForEach(obj, cjson_input)
+    for(int i = 0; i <= count; i++)
     {
-        if(i < 64)
-        {
-            pack_json_to_sf(bej_tuple_list, &i, obj, major_dict, annotation_dict);
-        }
-        else
-        {
-            printf("Error");
-        }
+        printf(" [%d] name = %s, type = %s \n", bej_tuple[i]->bejS.seq, bej_tuple[i]->bejS.name, getBejtypeName(bej_tuple[i]->bejF.bejtype));
     }
+}
+
+void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
+{
+    const cJSON *obj = NULL;
+
+    // Create root tuple
+    BejTupleS_t bejS = {.seq = 0, .annot_flag = 0, .name = ""};
+    BejTupleF_t bejF = {.bejtype = bejSet};
+    BejTuple_t root_bej_tuple = {.bejS = bejS, .bejF = bejF};
+    BejTuple_t **root_bej_V = malloc(cJSON_GetArraySize(json_input) * sizeof(BejTuple_t));
+
+    int index = 0;
+    cJSON_ArrayForEach(obj, json_input)
+    {        
+        root_bej_V[index++] = pack_json_to_sfv(obj, major_dict, annotation_dict);
+    }
+    printf("------------------------------------------\n");
+    printf(" index = %d\n", index);
+    showTuple(root_bej_V, index-1);
 
     // Traverse the Linked list and calculate the length
 
     // Show BEJ encoded result
-    // printBEJ(bej_tuple_node);
 }
 
 int main(int argc, char *argv[])
@@ -166,10 +201,10 @@ int main(int argc, char *argv[])
 
         uint8_t *json_input;
         rtn = readFile(argv[3], &json_input);
-        // ParseInfo_t parsejsoninfo = {.buf = json_input, .ptr = json_input, .datalen = (size_t)rtn, .offset = 0};
-        BejTuple_t *bej_tuple_list = (BejTuple_t *)malloc(sizeof(BejTuple_t) * 64);
-        encodeJsonToBinary(bej_tuple_list, (const char *) json_input, entryinfos, annotation_infos);
-        free(bej_tuple_list);
+        cJSON *cjson_input = cJSON_Parse((const char *)json_input);
+        BejTuple_t *bej_tuple_list = (BejTuple_t *)malloc(sizeof(BejTuple_t) * cJSON_GetArraySize(cjson_input));
+        
+        encodeJsonToBinary(bej_tuple_list, cjson_input, entryinfos, annotation_infos);
     }
 
     return 0;

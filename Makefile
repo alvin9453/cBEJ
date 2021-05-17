@@ -7,4 +7,4 @@ all:
 	$(CC) $(source) -o $(exe)
 
 encode:
-	$(CC) $(source) -o $(exe) -D $(options)
+	$(CC) $(source) -o $(exe) -D $(options) -g
