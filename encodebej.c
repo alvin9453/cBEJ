@@ -36,7 +36,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
     BejTupleS_t bejS;
     BejTupleF_t bejF;
-    void *bej_V;
+    void *bejV;
     bejSet_t *vset;
     bejArray_t *varray;
     BejTuple_t *packed_result;
@@ -65,7 +65,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         {
             vset->tuples = NULL;
         } 
-        bej_V = vset;
+        bejV = vset;
     }
     else if (json->type == cJSON_Array)
     {
@@ -79,7 +79,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             memcpy(varray->tuples, packed_result, sizeof(BejTuple_t));
             varray->tuples++;
         }
-        bej_V = varray;
+        bejV = varray;
     }
     else
     {
@@ -87,46 +87,49 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         {
             const char *json_string;
             json_string = json->valuestring;
-            bej_V = malloc(1 * sizeof(json_string));
-            memcpy(bej_V, json_string, sizeof(json_string));
+            bejV = malloc(1 * sizeof(json_string));
+            bejV = (char *)json_string;
         }
         else if (json->type == cJSON_Number)
         {
             double *json_valuedouble_p;
             double json_valuedouble = json->valuedouble;
             json_valuedouble_p = &(json_valuedouble);
-            bej_V = malloc(1 * sizeof(double));
-            memcpy(bej_V, json_valuedouble_p, sizeof(json_valuedouble_p));
+            bejV = malloc(1 * sizeof(double));
+            memcpy(bejV, json_valuedouble_p, sizeof(json_valuedouble_p));
         }
         else if (cJSON_IsTrue(json))
         {
             int true_value = 0;
             int *true_value_p;
             true_value_p = &true_value;
-            bej_V = malloc(sizeof(int));
-            memcpy(bej_V, true_value_p, sizeof(true_value_p));
+            bejV = malloc(sizeof(int));
+            memcpy(bejV, true_value_p, sizeof(true_value_p));
         }
         else if (cJSON_IsFalse(json))
         {
             int false_value = 0;
             int *false_value_p;
             false_value_p = &false_value;
-            bej_V = malloc(sizeof(int));
-            memcpy(bej_V, false_value_p, sizeof(false_value_p));
+            bejV = malloc(sizeof(int));
+            memcpy(bejV, false_value_p, sizeof(false_value_p));
+        }
+        else if (cJSON_IsNull)
+        {
+            bejV = NULL;
         }
     }
 
     EntryInfo_t *found_major_entry = find_entry_from_dictionary(json->string, major_dict);
     if (found_major_entry != NULL)
     {
-        // printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", found_major_entry->Name, found_major_entry->SequenceNumber);
+        printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", found_major_entry->Name, found_major_entry->SequenceNumber);
         bejS.seq = found_major_entry->SequenceNumber;
         bejS.name = found_major_entry->Name; // One bug is here
         bejS.annot_flag = 0;
 
         // BejTupleF_t
-        // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(major_dict->ChildInfo[major_dict_child_index]->bejtype));
-
+        printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(found_major_entry->bejtype));
         bejF.bejtype = found_major_entry->bejtype;
     }
 
@@ -139,7 +142,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         bejS.name = found_annotation_entry->Name;
         bejS.annot_flag = 1;
 
-        // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(annotation_dict->ChildInfo[anno_dict_child_index]->bejtype));
+        // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(found_annotation_entry->bejtype));
 
         bejF.bejtype = found_annotation_entry->bejtype;
     }
@@ -152,7 +155,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         BejTuple_t *bej_tuple = malloc(sizeof(BejTuple_t));
         bej_tuple->bejS = bejS;
         bej_tuple->bejF = bejF;
-        bej_tuple->bejV = bej_V;
+        bej_tuple->bejV = bejV;
 
         // printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS.seq, bejS.name, bejS.annot_flag, getBejtypeName(bejF.bejtype));
 
@@ -167,23 +170,33 @@ void showTuple(BejTuple_t *tuple)
     bejSet_t *vset;
     bejArray_t *varray;
     nnint_t count;
-
-    printf(" [showTuple] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS->seq, bejS->name, bejS->annot_flag, getBejtypeName(bejF->bejtype));
+    // printf(" [showTuple] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS->seq, bejS->name, bejS->annot_flag, getBejtypeName(bejF->bejtype));
 
     switch (bejF->bejtype)
     {
         case bejSet:
             vset = (bejSet_t *)tuple->bejV;
+            if(vset == NULL)
+            {
+                break;
+            }
             count = vset->count;
-            for(nnint_t i = 0; i < count; i++){
-                BejTuple_t *bejtuple = &vset->tuples[i];
+            printf("       - count = %d\n", count);
+            for(int i = 0; i < count; i++){
+                BejTuple_t *bejtuple = &vset->tuples[i];// This is a bug, need to fix
+                printf("- set [%d] name = %s, annotation_flag = %d\n", bejtuple->bejS.seq, bejtuple->bejS.name, bejtuple->bejS.annot_flag);
                 showTuple(bejtuple);
-                // printf("- set [%d] name = %s, annotation_flag = %d\n", vset->tuples[i].bejS.seq, vset->tuples[i].bejS.name, vset->tuples[i].bejS.annot_flag);
             }
             break;
-        case bejString:
-            // printf(" - string [%d] name = %s, value = %s\n", bejS->seq, bejS->name, (const char *)tuple->bejV);
+        case bejArray:
             break;
+        case bejString:
+            printf(" - string [%d] name = %s, value = %s\n", bejS->seq, bejS->name, (const char *)tuple->bejV);
+            break;
+        case bejInteger:
+            // printf(" - integer [%d] name = %s, value = %d\n", bejS->seq, bejS->name, (nnint_t)tuple->bejV);
+        case bejBoolean:
+        case bejEnum:
         default:
             break;
     }
@@ -213,15 +226,16 @@ void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo
         
         root_bej_V_init_ptr++;
     }
-    root_bej_set->tuples = malloc(sizeof(BejTuple_t *));
+    root_bej_set->tuples = malloc(sizeof(BejTuple_t));
     root_bej_set->tuples = root_bej_V;
     root_bej_set->count = cJSON_GetArraySize(json_input);
 
     root_bej_tuple->bejV = root_bej_set;
 
     printf("------------------------------------------\n");
-    // showTuple(root_bej_tuple);
+    showTuple(root_bej_tuple);
 
+    free(root_bej_set);
     // Traverse the Linked list and calculate the length
 
     // Show BEJ encoded result
