@@ -9,18 +9,24 @@ extern int DEBUG;
 
 #ifdef ENCODE_TEST
 
-int16_t find_name_from_dictionary(char *name, EntryInfo_t *dict)
+EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
 {
-    int16_t index = -1;
+    EntryInfo_t *found_entry = NULL;
     for (uint16_t i = 0; i < dict->ChildCount; i++)
     {
         if (strncmp(dict->ChildInfo[i]->Name, name, sizeof(dict->ChildInfo[i]->Name)) == 0)
         {
-            index = i;
+            found_entry = dict->ChildInfo[i];
             break;
         }
+        else if (dict->ChildInfo[i]->ChildCount > 0)
+        {
+            found_entry = find_entry_from_dictionary(name, dict->ChildInfo[i]);
+            if(found_entry != NULL)
+                break;
+        }
     }
-    return index;
+    return found_entry;
 }
 
 BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
@@ -110,35 +116,35 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         }
     }
 
-    int16_t major_dict_child_index = find_name_from_dictionary(json->string, major_dict);
-    if (major_dict_child_index > -1)
+    EntryInfo_t *found_major_entry = find_entry_from_dictionary(json->string, major_dict);
+    if (found_major_entry != NULL)
     {
-        printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", major_dict->ChildInfo[major_dict_child_index]->Name, major_dict->ChildInfo[major_dict_child_index]->SequenceNumber);
-        bejS.seq = major_dict->ChildInfo[major_dict_child_index]->SequenceNumber;
-        bejS.name = major_dict->ChildInfo[major_dict_child_index]->Name; // One bug is here
+        // printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", found_major_entry->Name, found_major_entry->SequenceNumber);
+        bejS.seq = found_major_entry->SequenceNumber;
+        bejS.name = found_major_entry->Name; // One bug is here
         bejS.annot_flag = 0;
 
         // BejTupleF_t
         // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(major_dict->ChildInfo[major_dict_child_index]->bejtype));
 
-        bejF.bejtype = major_dict->ChildInfo[major_dict_child_index]->bejtype;
+        bejF.bejtype = found_major_entry->bejtype;
     }
 
     // Set annotation flag
-    int16_t anno_dict_child_index = find_name_from_dictionary(json->string, annotation_dict);
-    if (anno_dict_child_index > -1)
+    EntryInfo_t *found_annotation_entry = find_entry_from_dictionary(json->string, annotation_dict);
+    if (found_annotation_entry != NULL)
     {
-        // printf(" - [DEBUG] find \"%s\" is annotation. \n", annotation_dict->ChildInfo[anno_dict_child_index]->Name);
-        bejS.seq = annotation_dict->ChildInfo[anno_dict_child_index]->SequenceNumber;
-        bejS.name = annotation_dict->ChildInfo[anno_dict_child_index]->Name;
+        // printf(" - [DEBUG] find \"%s\" is annotation. \n", found_annotation_entry->Name);
+        bejS.seq = found_annotation_entry->SequenceNumber;
+        bejS.name = found_annotation_entry->Name;
         bejS.annot_flag = 1;
 
         // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(annotation_dict->ChildInfo[anno_dict_child_index]->bejtype));
 
-        bejF.bejtype = annotation_dict->ChildInfo[anno_dict_child_index]->bejtype;
+        bejF.bejtype = found_annotation_entry->bejtype;
     }
 
-    if (major_dict_child_index == -1 && anno_dict_child_index == -1)
+    if (found_major_entry == NULL && found_annotation_entry == NULL)
     {
         printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
         return NULL;

@@ -170,7 +170,7 @@ void parseDict(ParseInfo_t *parseinfo, EntryInfo_t **entryinfos_ptr)
             entryinfos[i].Name = (uint8_t *)"";
         entryinfos[i].index = i;
     }
-    showEntries(entryinfos, 0);
+    // showEntries(entryinfos, 0);
     *entryinfos_ptr = entryinfos;
 }
 
