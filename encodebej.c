@@ -22,7 +22,7 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
         else if (dict->ChildInfo[i]->ChildCount > 0)
         {
             found_entry = find_entry_from_dictionary(name, dict->ChildInfo[i]);
-            if(found_entry != NULL)
+            if (found_entry != NULL)
                 break;
         }
     }
@@ -40,7 +40,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     bejSet_t *vset;
     bejArray_t *varray;
     BejTuple_t *packed_result;
-    // printf(" -- %s\n", json->string);
+    printf(" -- %s\n", json->string);
 
     const cJSON *obj = NULL;
 
@@ -48,23 +48,25 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     {
         vset = malloc(sizeof(bejSet_t));
         vset->count = cJSON_GetArraySize(json);
-        if(cJSON_GetArraySize(json) != 0){
+        if (cJSON_GetArraySize(json) != 0)
+        {
             vset->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
-            
+
             cJSON_ArrayForEach(obj, json)
             {
                 packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
-                if (packed_result != NULL){
+                if (packed_result != NULL)
+                {
                     // printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", packed_result->bejS.seq, packed_result->bejS.name, packed_result->bejS.annot_flag, getBejtypeName(packed_result->bejF.bejtype));
                     memcpy(vset->tuples, packed_result, sizeof(BejTuple_t));
-                    vset->tuples++;
+                    vset->tuples += sizeof(BejTuple_t);
                 }
             }
         }
         else
         {
             vset->tuples = NULL;
-        } 
+        }
         bejV = vset;
     }
     else if (json->type == cJSON_Array)
@@ -77,7 +79,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             packed_result = pack_json_to_sfv(obj->child, major_dict, annotation_dict);
             // printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", packed_result->bejS.seq, packed_result->bejS.name, packed_result->bejS.annot_flag, getBejtypeName(packed_result->bejF.bejtype));
             memcpy(varray->tuples, packed_result, sizeof(BejTuple_t));
-            varray->tuples++;
+            varray->tuples += sizeof(BejTuple_t);
         }
         bejV = varray;
     }
@@ -85,34 +87,27 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     {
         if (json->type == cJSON_String)
         {
-            const char *json_string;
-            json_string = json->valuestring;
-            bejV = malloc(1 * sizeof(json_string));
-            bejV = (char *)json_string;
+            const char *json_string = json->valuestring;
+            bejV = malloc(strlen(json_string));
+            memcpy(bejV, (char *)json_string, strlen(json_string) + 1);
         }
         else if (json->type == cJSON_Number)
         {
-            double *json_valuedouble_p;
-            double json_valuedouble = json->valuedouble;
-            json_valuedouble_p = &(json_valuedouble);
-            bejV = malloc(1 * sizeof(double));
-            memcpy(bejV, json_valuedouble_p, sizeof(json_valuedouble_p));
+            bejInteger_t *bej_integer = malloc(sizeof(bejInteger_t));
+            bej_integer->value = (bejint_t)json->valuedouble;
+            bejV = bej_integer;
         }
         else if (cJSON_IsTrue(json))
         {
-            int true_value = 0;
-            int *true_value_p;
-            true_value_p = &true_value;
-            bejV = malloc(sizeof(int));
-            memcpy(bejV, true_value_p, sizeof(true_value_p));
+            bejBoolean_t *bej_bool = malloc(sizeof(bejBoolean_t));
+            bej_bool->value = 1;
+            bejV = bej_bool;
         }
         else if (cJSON_IsFalse(json))
         {
-            int false_value = 0;
-            int *false_value_p;
-            false_value_p = &false_value;
-            bejV = malloc(sizeof(int));
-            memcpy(bejV, false_value_p, sizeof(false_value_p));
+            bejBoolean_t *bej_bool = malloc(sizeof(bejBoolean_t));
+            bej_bool->value = 0;
+            bejV = bej_bool;
         }
         else if (cJSON_IsNull)
         {
@@ -123,13 +118,13 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     EntryInfo_t *found_major_entry = find_entry_from_dictionary(json->string, major_dict);
     if (found_major_entry != NULL)
     {
-        printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", found_major_entry->Name, found_major_entry->SequenceNumber);
+        // printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", found_major_entry->Name, found_major_entry->SequenceNumber);
         bejS.seq = found_major_entry->SequenceNumber;
         bejS.name = found_major_entry->Name; // One bug is here
         bejS.annot_flag = 0;
 
         // BejTupleF_t
-        printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(found_major_entry->bejtype));
+        // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(found_major_entry->bejtype));
         bejF.bejtype = found_major_entry->bejtype;
     }
 
@@ -151,13 +146,15 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     {
         printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
         return NULL;
-    }else{
+    }
+    else
+    {
         BejTuple_t *bej_tuple = malloc(sizeof(BejTuple_t));
         bej_tuple->bejS = bejS;
         bej_tuple->bejF = bejF;
         bej_tuple->bejV = bejV;
 
-        // printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS.seq, bejS.name, bejS.annot_flag, getBejtypeName(bejF.bejtype));
+        printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS.seq, bejS.name, bejS.annot_flag, getBejtypeName(bejF.bejtype));
 
         return bej_tuple;
     }
@@ -169,37 +166,40 @@ void showTuple(BejTuple_t *tuple)
     BejTupleF_t *bejF = &tuple->bejF;
     bejSet_t *vset;
     bejArray_t *varray;
+    bejInteger_t *vinteger;
     nnint_t count;
-    // printf(" [showTuple] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS->seq, bejS->name, bejS->annot_flag, getBejtypeName(bejF->bejtype));
+    printf(" [showTuple] seq = %d, name = %s, annotation_flag = %d, type = %s\n", bejS->seq, bejS->name, bejS->annot_flag, getBejtypeName(bejF->bejtype));
 
-    switch (bejF->bejtype)
+    if (bejF->bejtype == bejSet)
     {
-        case bejSet:
-            vset = (bejSet_t *)tuple->bejV;
-            if(vset == NULL)
-            {
-                break;
-            }
+        vset = (bejSet_t *)tuple->bejV;
+        if (vset != NULL)
+        {
             count = vset->count;
-            printf("       - count = %d\n", count);
-            for(int i = 0; i < count; i++){
-                BejTuple_t *bejtuple = &vset->tuples[i];// This is a bug, need to fix
-                printf("- set [%d] name = %s, annotation_flag = %d\n", bejtuple->bejS.seq, bejtuple->bejS.name, bejtuple->bejS.annot_flag);
+            for (int i = 0; i < count; i++)
+            {
+                BejTuple_t *bejtuple = &vset->tuples[i]; // This is a bug, need to fix
+                // printf(" - [%d] \"bejSet\" name = %s, annotation_flag = %d\n", bejtuple->bejS.seq, bejtuple->bejS.name, bejtuple->bejS.annot_flag);
                 showTuple(bejtuple);
             }
-            break;
-        case bejArray:
-            break;
-        case bejString:
-            printf(" - string [%d] name = %s, value = %s\n", bejS->seq, bejS->name, (const char *)tuple->bejV);
-            break;
-        case bejInteger:
-            // printf(" - integer [%d] name = %s, value = %d\n", bejS->seq, bejS->name, (nnint_t)tuple->bejV);
-        case bejBoolean:
-        case bejEnum:
-        default:
-            break;
+        }
     }
+    else if (bejF->bejtype == bejString)
+    {
+        printf(" - [%d] \"bejString\" name = %s, value = %s\n", bejS->seq, bejS->name, (const char *)tuple->bejV);
+    }
+    else if (bejF->bejtype == bejInteger)
+    {
+        vinteger = (bejInteger_t *)tuple->bejV;
+        printf(" - [%d] \"bejInteger\" name = %s, value = %lld\n", bejS->seq, bejS->name, vinteger->value);
+    }
+    else if (bejF->bejtype == bejEnum)
+    {
+        printf(" - [%d] \"bejEnum\" name = %s, value = %s\n", bejS->seq, bejS->name, (const char *)tuple->bejV);
+    }
+    /*
+        TODO : the other BEJ type
+    */
 }
 
 void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
@@ -223,7 +223,7 @@ void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo
         BejTuple_t *tuple = pack_json_to_sfv(obj, major_dict, annotation_dict);
         // printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", tuple->bejS.seq, tuple->bejS.name, tuple->bejS.annot_flag, getBejtypeName(tuple->bejF.bejtype));
         memcpy(root_bej_V_init_ptr, tuple, sizeof(BejTuple_t));
-        
+
         root_bej_V_init_ptr++;
     }
     root_bej_set->tuples = malloc(sizeof(BejTuple_t));
@@ -251,7 +251,7 @@ int main(int argc, char *argv[])
         DEBUG = 1;
     if (argc < 2)
     {
-        fprintf(stderr, "usage %s majordict [annodict] [bejpayload]\n", argv[0]);
+        fprintf(stderr, "usage %s majordict [annodict] [JSON file]\n", argv[0]);
         return 127;
     }
     else
@@ -286,7 +286,7 @@ int main(int argc, char *argv[])
         rtn = readFile(argv[3], &json_input);
         cJSON *cjson_input = cJSON_Parse((const char *)json_input);
         BejTuple_t *bej_tuple_list = (BejTuple_t *)malloc(sizeof(BejTuple_t) * cJSON_GetArraySize(cjson_input));
-        
+
         encodeJsonToBinary(bej_tuple_list, cjson_input, entryinfos, annotation_infos);
     }
 
