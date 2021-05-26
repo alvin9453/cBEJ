@@ -1,5 +1,5 @@
 CC:=gcc
-exe:=encodebej.exe
+exe:=encodebej
 source:=cJSON.c decodebej.c encodebej.c
 options:=ENCODE_TEST
 
