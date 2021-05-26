@@ -17,7 +17,7 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
     EntryInfo_t *found_entry = NULL;
     for (uint16_t i = 0; i < dict->ChildCount; i++)
     {
-        if (strncmp(name, dict->ChildInfo[i]->Name, strlen(name)) == 0)
+        if (strcmp(name, dict->ChildInfo[i]->Name) == 0)
         {
             found_entry = dict->ChildInfo[i];
             break;
