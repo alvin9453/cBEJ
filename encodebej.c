@@ -175,6 +175,96 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
 }
 
+#define GET_BEJ_Length(TYPE, SIZE, BEJ_LENGTH) \
+    BEJ_LENGTH = sizeof(TYPE);                 \
+    for (uint8_t i = 0; i < sizeof(TYPE); i++) \
+        BEJ_LENGTH <<= 8;                      \
+    BEJ_LENGTH += SIZE;
+
+nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
+{
+    BejTupleS_t *bejS = &tuple->bejS;
+    BejTupleF_t *bejF = &tuple->bejF;
+    BejTupleL_t bejL = 0;
+    bejSet_t *vset;
+    bejArray_t *varray;
+    bejInteger_t *vinteger;
+    bejString_t *vstring;
+    bejBoolean_t *vbool;
+    nnint_t count = 0;
+    BejTuple_t *bejtuple;
+    nnint_t total_bej_tuple_slvf_length = 0;
+    nnint_t bejv_length = 0;
+
+    PRINT_LAYER(layer);
+    switch (bejF->bejtype)
+    {
+    case bejSet:
+        printf(" - [%d] %s , \"bejSet\", annotation_flag = %d\n", bejS->seq, bejS->name == "" ? "<SET>" : bejS->name, bejS->annot_flag);
+        vset = (bejSet_t *)tuple->bejV;
+        if (vset != NULL)
+        {
+            count = vset->count;
+            for (nnint_t i = 0; i < count; i++)
+            {
+                bejtuple = &vset->tuples[i];
+                bejv_length += fill_tuple_length(bejtuple, layer + 1);
+            }
+            GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        }
+        break;
+    case bejArray:
+        printf(" - [%d] %s , \"bejArray\", annotation_flag = %d\n", bejS->seq, bejS->name, bejS->annot_flag);
+        varray = (bejArray_t *)tuple->bejV;
+        count = varray->count;
+        for (nnint_t i = 0; i < count; i++)
+        {
+            bejtuple = &varray->tuples[i];
+            fill_tuple_length(bejtuple, layer + 1);
+        }
+        break;
+    case bejString:
+        vstring = (bejString_t *)tuple->bejV;
+        bejv_length = strlen((const char *)vstring);
+        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        tuple->bejL = bejL;
+        printf(" - [%d] %s , \"bejString\", value = %s, strlen = %ld, bejL = %d\n", bejS->seq, bejS->name, strlen((const char *)vstring) > 1 ? (const char *)vstring : "\"\"", strlen((const char *)vstring), bejL);
+        break;
+    case bejInteger:
+        vinteger = (bejInteger_t *)tuple->bejV;
+        bejv_length = sizeof(vinteger->value);
+        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        tuple->bejL = bejL;
+        printf(" - [%d] %s , \"bejInteger\", value = %lld, bejL = %d\n", bejS->seq, bejS->name, vinteger->value, bejL);
+        break;
+    case bejEnum:
+        bejv_length = (tuple->bejV == NULL ? 0 : strlen((const char *)tuple->bejV) + 1);
+        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        tuple->bejL = bejL;
+        printf(" - [%d] %s , \"bejEnum\", value = %s, bejL = %d\n", bejS->seq, bejS->name, tuple->bejV == NULL ? "null" : (const char *)tuple->bejV, bejL);
+        break;
+    case bejBoolean:
+        vbool = (bejBoolean_t *)tuple->bejV;
+        bejv_length = sizeof(vbool->value);
+        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        tuple->bejL = bejL;
+        printf(" - [%d] %s , \"bejBoolean\", value = %s , bejL = %d\n", bejS->seq, bejS->name, vbool->value == 0x00 ? "true" : "false", bejL);
+        break;
+    default:
+        // TODO : the other BEJ type
+        // bejBytesString
+        // bejChoice
+        // bejPropertyAnnotation
+        // bejResourceLink
+        // bejResourceLinkExpansion
+        // bejReal
+        break;
+    }
+    total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(bejS->annot_flag) + sizeof(BejTupleF_t) + bejv_length + sizeof(bejL);
+
+    return bejL;
+}
+
 void showTuple(BejTuple_t *tuple, int layer)
 {
     BejTupleS_t *bejS = &tuple->bejS;
@@ -271,7 +361,8 @@ void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo
     root_bej_tuple->bejV = root_bej_set;
 
     printf("------------------------------------------\n");
-    showTuple(root_bej_tuple, 0);
+    // showTuple(root_bej_tuple, 0);
+    fill_tuple_length(root_bej_tuple, 0);
 
     free(root_bej_set);
     // Traverse the Linked list and calculate the length
