@@ -35,6 +35,24 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
     return found_entry;
 }
 
+// Convert raw value(e.g. real BejS seq number or real BejL) to nnint_t foramt
+// e.g. if nnint is 4 bytes, then 0x03 0x00 0x00 0x41 value is 65; 0x03 0x00 0x39 0x05 is 1337
+nnint_t convert_to_nnint_format(nnint_t raw)
+{
+    nnint_t value = sizeof(nnint_t) - 1;
+    value <<= 8 * (sizeof(nnint_t) - 1);
+
+    if (raw >= value)
+    {
+        printf(" - [ERROR] too many bytes for fixed nnint\n");
+        return 0;
+    }
+
+    value += raw;
+
+    return value;
+}
+
 BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
 {
     // parse cjson data to bej_tuple
@@ -51,7 +69,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     BejTuple_t *vset_tuples_p;
     BejTuple_t *packed_result;
     int index = 0;
-    printf(" -- %s\n", json->string == NULL ? "<SET>" : json->string) ;
+    // printf(" -- %s\n", json->string == NULL ? "<SET>" : json->string) ;
 
     const cJSON *obj = NULL;
 
@@ -122,7 +140,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
     if(json->string == NULL) 
     {
-        bejS.seq = 0;
+        bejS.seq = convert_to_nnint_format(0);
         bejS.name = "";
         bejS.annot_flag = 0;
 
@@ -134,7 +152,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         if (find_major_entry != NULL)
         {
             // printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", find_major_entry->Name, find_major_entry->SequenceNumber);
-            bejS.seq = find_major_entry->SequenceNumber;
+            bejS.seq = convert_to_nnint_format(find_major_entry->SequenceNumber);
             bejS.name = find_major_entry->Name;
             bejS.annot_flag = 0;
 
@@ -148,7 +166,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         if (find_annotation_entry != NULL)
         {
             // printf(" - [DEBUG] find \"%s\" is annotation. \n", find_annotation_entry->Name);
-            bejS.seq = find_annotation_entry->SequenceNumber;
+            bejS.seq = convert_to_nnint_format(find_annotation_entry->SequenceNumber);
             bejS.name = find_annotation_entry->Name;
             bejS.annot_flag = 1;
 
@@ -175,12 +193,6 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
 }
 
-#define GET_BEJ_Length(TYPE, SIZE, BEJ_LENGTH) \
-    BEJ_LENGTH = sizeof(TYPE);                 \
-    for (uint8_t i = 0; i < sizeof(TYPE); i++) \
-        BEJ_LENGTH <<= 8;                      \
-    BEJ_LENGTH += SIZE;
-
 nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
 {
     BejTupleS_t *bejS = &tuple->bejS;
@@ -200,7 +212,7 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
     switch (bejF->bejtype)
     {
     case bejSet:
-        printf(" - [%d] %s , \"bejSet\", annotation_flag = %d\n", bejS->seq, bejS->name == "" ? "<SET>" : bejS->name, bejS->annot_flag);
+        
         vset = (bejSet_t *)tuple->bejV;
         if (vset != NULL)
         {
@@ -210,45 +222,47 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
                 bejtuple = &vset->tuples[i];
                 bejv_length += fill_tuple_length(bejtuple, layer + 1);
             }
-            GET_BEJ_Length(uint8_t, bejv_length, bejL);
+            bejL = convert_to_nnint_format(bejv_length);
         }
+        printf(" - [0x%x] %s , \"bejSet\", bejL = 0x%x\n", bejS->seq, bejS->name == "" ? "<SET>" : bejS->name, bejL);
         break;
     case bejArray:
-        printf(" - [%d] %s , \"bejArray\", annotation_flag = %d\n", bejS->seq, bejS->name, bejS->annot_flag);
         varray = (bejArray_t *)tuple->bejV;
         count = varray->count;
         for (nnint_t i = 0; i < count; i++)
         {
             bejtuple = &varray->tuples[i];
-            fill_tuple_length(bejtuple, layer + 1);
+            bejv_length += fill_tuple_length(bejtuple, layer + 1);
         }
+        bejL = convert_to_nnint_format(bejv_length);
+        printf(" - [0x%x] %s , \"bejArray\", bejL = 0x%x\n", bejS->seq, bejS->name, bejL);
         break;
     case bejString:
         vstring = (bejString_t *)tuple->bejV;
         bejv_length = strlen((const char *)vstring);
-        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        bejL = convert_to_nnint_format(bejv_length);
         tuple->bejL = bejL;
-        printf(" - [%d] %s , \"bejString\", value = %s, strlen = %ld, bejL = %d\n", bejS->seq, bejS->name, strlen((const char *)vstring) > 1 ? (const char *)vstring : "\"\"", strlen((const char *)vstring), bejL);
+        printf(" - [0x%x] %s , \"bejString\", value = %s, strlen = %ld, bejL = 0x%x\n", bejS->seq, bejS->name, strlen((const char *)vstring) > 1 ? (const char *)vstring : "\"\"", strlen((const char *)vstring), bejL);
         break;
     case bejInteger:
         vinteger = (bejInteger_t *)tuple->bejV;
         bejv_length = sizeof(vinteger->value);
-        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        bejL = convert_to_nnint_format(bejv_length);
         tuple->bejL = bejL;
-        printf(" - [%d] %s , \"bejInteger\", value = %lld, bejL = %d\n", bejS->seq, bejS->name, vinteger->value, bejL);
+        printf(" - [0x%x] %s , \"bejInteger\", value = %lld, bejL = 0x%x\n", bejS->seq, bejS->name, vinteger->value, bejL);
         break;
     case bejEnum:
         bejv_length = (tuple->bejV == NULL ? 0 : strlen((const char *)tuple->bejV) + 1);
-        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        bejL = convert_to_nnint_format(bejv_length);
         tuple->bejL = bejL;
-        printf(" - [%d] %s , \"bejEnum\", value = %s, bejL = %d\n", bejS->seq, bejS->name, tuple->bejV == NULL ? "null" : (const char *)tuple->bejV, bejL);
+        printf(" - [0x%x] %s , \"bejEnum\", value = %s, bejL = 0x%x\n", bejS->seq, bejS->name, tuple->bejV == NULL ? "null" : (const char *)tuple->bejV, bejL);
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
         bejv_length = sizeof(vbool->value);
-        GET_BEJ_Length(uint8_t, bejv_length, bejL);
+        bejL = convert_to_nnint_format(bejv_length);
         tuple->bejL = bejL;
-        printf(" - [%d] %s , \"bejBoolean\", value = %s , bejL = %d\n", bejS->seq, bejS->name, vbool->value == 0x00 ? "true" : "false", bejL);
+        printf(" - [0x%x] %s , \"bejBoolean\", value = %s , bejL = 0x%x\n", bejS->seq, bejS->name, vbool->value == 0x00 ? "true" : "false", bejL);
         break;
     default:
         // TODO : the other BEJ type
@@ -260,9 +274,9 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
         // bejReal
         break;
     }
-    total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(bejS->annot_flag) + sizeof(BejTupleF_t) + bejv_length + sizeof(bejL);
+    total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(bejS->annot_flag) + sizeof(BejTupleF_t) + sizeof(bejL) + bejv_length;
 
-    return bejL;
+    return total_bej_tuple_slvf_length;
 }
 
 void showTuple(BejTuple_t *tuple, int layer)
@@ -335,7 +349,7 @@ void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo
     const cJSON *obj = NULL;
 
     // Create root tuple
-    BejTupleS_t bejS = {.seq = 0, .annot_flag = 0, .name = "root_tuple"};
+    BejTupleS_t bejS = {.seq = convert_to_nnint_format(0), .annot_flag = 0, .name = "root_tuple"};
     BejTupleF_t bejF = {.bejtype = bejSet};
     BejTuple_t *root_bej_tuple = malloc(sizeof(BejTuple_t));
     root_bej_tuple->bejS = bejS;
