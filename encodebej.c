@@ -9,6 +9,8 @@ extern int DEBUG;
 
 #ifdef ENCODE_TEST
 
+#define ENCODEBEJ_OUTPUT_BINARY_FILE "bejencode_result.bin"
+
 #define PRINT_LAYER(layer) \
    for(uint8_t i=0; i<(layer); i++) printf("    ")
 
@@ -35,43 +37,11 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
     return found_entry;
 }
 
-// nnint => bytes : value
-// Convert raw value(e.g. real BejS seq number or real BejL) to nnint_t foramt
-// e.g. if nnint is 4 bytes, then 0x03 0x00 0x00 0x41 value is 65; 0x03 0x00 0x39 0x05 is 1337
-nnint_t convert_to_nnint_format(nnint_t raw)
-{
-    nnint_t value = sizeof(nnint_t) - 1;
-    value <<= 8 * (sizeof(nnint_t) - 1);
-
-    if (raw >= value)
-    {
-        printf(" - [ERROR] too many bytes for fixed nnint\n");
-        return 0;
-    }
-
-    value |= raw;
-
-    return value;
-}
-
-nnint_t get_value_from_nnint_format(nnint_t nnint)
-{
-    nnint_t count;
-    unsigned int mask = 0xff;
-    for(uint8_t i = 1; i < sizeof(nnint_t) - 1; i++)
-    {
-        mask <<= 8;
-        mask |= 0xff;
-    }
-    // printf("    - mask = %x , nnint & mask = %x\n", mask, nnint & mask);
-    return nnint & mask;
-}
-
-
+// Pack cJSON data into BEJ Tuple (SFV , not L).
+// Note that all nnint in this function is NOT the DMTF-defined format, the first bytes didn't present the length
 BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
 {
-    // parse cjson data to bej_tuple
-    // but still not fill the length
+    // parse cjson data to bej_tuple, but still not fill the length
 
     BejTupleS_t bejS;
     BejTupleF_t bejF;
@@ -85,10 +55,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     BejTuple_t *vset_tuples_p;
     BejTuple_t *packed_result;
     int index = 0;
-    printf(" -- %s\n", json->string == NULL ? "<SET>" : json->string) ;
-
     const cJSON *obj = NULL;
-
 
     if(json->string == NULL) 
     {
@@ -103,13 +70,11 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         EntryInfo_t *find_major_entry = find_entry_from_dictionary(json->string, major_dict);
         if (find_major_entry != NULL)
         {
-            printf(" - [DEBUG] find \"%s\" in dictionary , seq number = %u\n", find_major_entry->Name, find_major_entry->SequenceNumber);
             bejS.seq = find_major_entry->SequenceNumber;
             bejS.name = find_major_entry->Name;
             bejS.annot_flag = 0;
 
             // BejTupleF_t
-            // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(find_major_entry->bejtype));
             bejF.bejtype = find_major_entry->bejtype;
         }
 
@@ -117,12 +82,9 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         EntryInfo_t *find_annotation_entry = find_entry_from_dictionary(json->string, annotation_dict);
         if (find_annotation_entry != NULL)
         {
-            // printf(" - [DEBUG] find \"%s\" is annotation. \n", find_annotation_entry->Name);
             bejS.seq = find_annotation_entry->SequenceNumber;
             bejS.name = find_annotation_entry->Name;
             bejS.annot_flag = 1;
-
-            // printf(" - [DEBUG] bejtype = %s\n", getBejtypeName(find_annotation_entry->bejtype));
 
             bejF.bejtype = find_annotation_entry->bejtype;
         }
@@ -226,8 +188,8 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
 }
 
-// Todo : remove layer which is for debug
-nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
+// Calculate tye BejL based on the pack_json_to_sfv result
+nnint_t set_tuple_length(BejTuple_t *tuple)
 {
     BejTupleS_t *bejS = &tuple->bejS;
     BejTupleF_t *bejF = &tuple->bejF;
@@ -254,12 +216,11 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &vset->tuples[i];
-                bejL += fill_tuple_length(bejtuple, layer + 1) + sizeof(nnint_t) + 1;
+                bejL += set_tuple_length(bejtuple) + sizeof(nnint_t) + 1;
             }
             bejv_length = bejL;
             tuple->bejL = bejL;
         }
-        // printf(" - [0x%x] %s , \"bejSet\", bejL = 0x%x\n", bejS->seq, bejS->name == "" ? "<SET>" : bejS->name, bejL);
         break;
     case bejArray:
         varray = (bejArray_t *)tuple->bejV;
@@ -267,39 +228,34 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
         for (nnint_t i = 0; i < count; i++)
         {
             bejtuple = &varray->tuples[i];
-            bejL += fill_tuple_length(bejtuple, layer + 1);
+            bejL += set_tuple_length(bejtuple);
         }
         bejv_length = bejL;
         tuple->bejL = bejL;
-        // printf(" - [0x%x] %s , \"bejArray\", bejL = 0x%x\n", bejS->seq, bejS->name, bejL);
         break;
     case bejString:
         vstring = (bejString_t *)tuple->bejV;
         bejL = strlen((const char *)vstring) + 1;
         bejv_length = bejL;
         tuple->bejL = bejL;
-        printf(" - [0x%x] %s , \"bejString\", value = %s, strlen = %ld, bejL = 0x%x\n", bejS->seq, bejS->name, strlen((const char *)vstring) > 1 ? (const char *)vstring : "\"\"", strlen((const char *)vstring), bejL);
         break;
     case bejInteger:
         vinteger = (bejInteger_t *)tuple->bejV;
         bejL = sizeof(vinteger->value);
         tuple->bejL = bejL;
         bejv_length = bejL;
-        // printf(" - [0x%x] %s , \"bejInteger\", value = %lld, bejL = 0x%x\n", bejS->seq, bejS->name, vinteger->value, bejL);
         break;
     case bejEnum:
         venum = (bejEnum_t *)tuple->bejV;
         bejL = sizeof(venum->nnint);
         tuple->bejL = bejL;
         bejv_length = bejL + 1; // one nnint byte
-        // printf(" - [0x%x] %s , \"bejEnum\", value = (%d)%s, bejL = 0x%x\n", bejS->seq, bejS->name, venum->nnint, venum->name, bejL);
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
         bejL = sizeof(vbool->value);
         tuple->bejL = bejL;
         bejv_length = bejL;
-        // printf(" - [0x%x] %s , \"bejBoolean\", value = %s , bejL = 0x%x\n", bejS->seq, bejS->name, vbool->value == 0x00 ? "true" : "false", bejL);
         break;
     default:
         // TODO : the other BEJ type
@@ -312,6 +268,7 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
         break;
     }
     if( strncmp(bejS->name, "root_tuple", strlen("root_tuple")) == 0){
+        // root tuple only need to know the length of BejV
         return bejv_length;
     }else{
         total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(BejTupleF_t) + sizeof(bejL) + bejv_length + another_nnint_count;
@@ -319,6 +276,7 @@ nnint_t fill_tuple_length(BejTuple_t *tuple, int layer)
     }
 }
 
+// For Debug usage : Print all tuples data
 void showTuple(BejTuple_t *tuple, int layer)
 {
     BejTupleS_t *bejS = &tuple->bejS;
@@ -387,13 +345,7 @@ void showTuple(BejTuple_t *tuple, int layer)
     }
 }
 
-void print_bytes(uint8_t *input, size_t size)
-{
-    for (size_t i = 0; i < size; i++)
-        printf("0x%02x%s", input[i], ((i + 1) % 16) ? " " : "\n");
-}
-
-void outputBejTupleInBytes(BejTuple_t *tuple)
+void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
 {
     BejTupleS_t *bejS = &tuple->bejS;
     BejTupleF_t *bejF = &tuple->bejF;
@@ -403,25 +355,22 @@ void outputBejTupleInBytes(BejTuple_t *tuple)
     bejArray_t *varray;
     bejEnum_t *venum;
     nnint_t count = 0;
-    FILE *fileToWrite = NULL;
     uint8_t nnint_size = sizeof(nnint_t);
     nnint_t annotation_flag = bejS->annot_flag;
     nnint_t seq = bejS->seq << 1 + annotation_flag;
 
-    if ((fileToWrite = fopen("bejencode_result.bin", "ab+")) != NULL)
+    if (output_file != NULL)
     {
         // Write BejS
-        fwrite(&nnint_size, sizeof(uint8_t), 1, fileToWrite);
-        fwrite(&seq, sizeof(nnint_t), 1, fileToWrite);
+        fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+        fwrite(&seq, sizeof(nnint_t), 1, output_file);
 
         // Write BejF
-        fwrite(bejF, sizeof(BejTupleF_t), 1, fileToWrite);
+        fwrite(bejF, sizeof(BejTupleF_t), 1, output_file);
 
         // Write BejL
-        fwrite(&nnint_size, sizeof(uint8_t), 1, fileToWrite);
-        fwrite(bejL, sizeof(BejTupleL_t),1, fileToWrite);
-
-        printf(" S = %x %x , F = %x, L = %x %x\n", nnint_size, seq, *bejF, nnint_size, *bejL);
+        fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+        fwrite(bejL, sizeof(BejTupleL_t),1, output_file);
 
         switch (bejF->bejtype)
         {
@@ -429,30 +378,36 @@ void outputBejTupleInBytes(BejTuple_t *tuple)
             vset = (bejSet_t *)tuple->bejV;
             count = vset->count;
 
-            fwrite(&nnint_size, sizeof(uint8_t), 1, fileToWrite);
-            fwrite(&count, sizeof(nnint_t),1, fileToWrite);
+            fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+            fwrite(&count, sizeof(nnint_t),1, output_file);
             break;
         case bejArray:
             varray = (bejArray_t *)tuple->bejV;
             count = varray->count;
 
-            fwrite(&nnint_size, sizeof(uint8_t), 1, fileToWrite);
-            fwrite(&count, sizeof(nnint_t), 1, fileToWrite);
+            fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+            fwrite(&count, sizeof(nnint_t), 1, output_file);
             break;
         case bejEnum:
             venum = (bejEnum_t *)tuple->bejV;
-            fwrite(&nnint_size, sizeof(uint8_t), 1, fileToWrite);
-            fwrite(&venum->nnint, sizeof(nnint_t), 1, fileToWrite);
+            fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+            fwrite(&venum->nnint, sizeof(nnint_t), 1, output_file);
             break;
         default:
-            fwrite(tuple->bejV, *bejL, 1, fileToWrite);
+            fwrite(tuple->bejV, *bejL, 1, output_file);
             break;
         }
-        fclose(fileToWrite);
     }
 }
 
-void showEncodedBejResult(BejTuple_t *tuple)
+void outputBejBasicToFile(FILE *output_file)
+{
+    BejBasic_t bej_basic = {.ver32 = 0xF1F0F000, .flags = 0, .schemaclass = 0}; // DSP0218_1.0.1
+    fwrite(&bej_basic, sizeof(bej_basic), 1, output_file);
+}
+
+// Traverse all BEJ Tuples and output binary to files
+void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
 {
     BejTupleS_t *bejS = &tuple->bejS;
     BejTupleF_t *bejF = &tuple->bejF;
@@ -467,7 +422,7 @@ void showEncodedBejResult(BejTuple_t *tuple)
     switch (bejF->bejtype)
     {
     case bejSet:
-        outputBejTupleInBytes(tuple);
+        outputBejTupleToFile(tuple, output_file);
         vset = (bejSet_t *)tuple->bejV;
         if (vset != NULL)
         {
@@ -475,26 +430,29 @@ void showEncodedBejResult(BejTuple_t *tuple)
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &vset->tuples[i];
-                showEncodedBejResult(bejtuple);
+                outputBejEncodeResult(bejtuple, output_file);
             }
         }
+        free(tuple->bejV);
         break;
     case bejArray:
-        outputBejTupleInBytes(tuple);
+        outputBejTupleToFile(tuple, output_file);
         varray = (bejArray_t *)tuple->bejV;
         count = varray->count;
         for (nnint_t i = 0; i < count; i++)
         {
             bejtuple = &varray->tuples[i];
-            showEncodedBejResult(bejtuple);
+            outputBejEncodeResult(bejtuple, output_file);
         }
+        free(tuple->bejV);
         break;
     case bejString:
     case bejInteger:
     case bejEnum:
     case bejBoolean:
     default:
-        outputBejTupleInBytes(tuple);
+        outputBejTupleToFile(tuple, output_file);
+        free(tuple);
         // TODO : the other BEJ type
         // bejBytesString
         // bejChoice
@@ -506,10 +464,8 @@ void showEncodedBejResult(BejTuple_t *tuple)
     }
 }
 
-void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
+BejTuple_t *encodeJsonToBinary(cJSON *json_input, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
 {
-    BejBasic_t bej_basic = {.ver32 = 0xF1F0F000, .flags = 0, .schemaclass = 0};
-
     const cJSON *obj = NULL;
 
     // Create root tuple
@@ -535,30 +491,17 @@ void encodeJsonToBinary(BejTuple_t *bej_tuple_list, cJSON *json_input, EntryInfo
     root_bej_set->tuples = malloc(sizeof(BejTuple_t));
     root_bej_set->tuples = root_bej_V;
     root_bej_set->count = cJSON_GetArraySize(json_input);
-
-    root_bej_tuple->bejV = root_bej_set;
-
-    printf("------------------------------------------\n");    
+    root_bej_tuple->bejV = root_bej_set;  
 
     nnint_t bejv_length = 0;
-    bejv_length = fill_tuple_length(root_bej_tuple, 0);
+    bejv_length = set_tuple_length(root_bej_tuple);
     root_bej_tuple->bejL = bejv_length;
 
-    showTuple(root_bej_tuple, 0);
-
-    FILE *fileToWrite = NULL;
-    if ((fileToWrite = fopen("bejencode_result.bin", "ab+")) != NULL)
-    {
-        fwrite(&bej_basic, sizeof(bej_basic), 1, fileToWrite);
+    if(DEBUG){
+        showTuple(root_bej_tuple, 0);
     }
-    fclose(fileToWrite);
 
-    showEncodedBejResult(root_bej_tuple);
-
-    free(root_bej_set);
-    // Traverse the Linked list and calculate the length
-
-    // Show BEJ encoded result
+    return root_bej_tuple;
 }
 
 int main(int argc, char *argv[])
@@ -579,12 +522,6 @@ int main(int argc, char *argv[])
         ssize_t rtn = readFile(argv[1], &input);
         if (rtn < 0)
             return (int)rtn;
-        /*
-        for (size_t i=0;i<rtn; i++) {
-            printf("%02hhx%s", input[i], (i+1)%16?" ":"\n");
-        }
-        */
-        // printf("read %lx(=%lu) bytes\n", rtn, rtn);
         fsize = (size_t)rtn;
     }
     ParseInfo_t parseInfo = {.buf = input, .ptr = input, .datalen = fsize, .offset = 0};
@@ -609,9 +546,21 @@ int main(int argc, char *argv[])
         {
             printf(" - [ERROR] not a valid json \n");
         }
-        BejTuple_t *bej_tuple_list = (BejTuple_t *)malloc(sizeof(BejTuple_t) * cJSON_GetArraySize(cjson_input));
 
-        encodeJsonToBinary(bej_tuple_list, cjson_input, entryinfos, annotation_infos);
+        BejTuple_t *bej_tuple_list = encodeJsonToBinary(cjson_input, entryinfos, annotation_infos);
+
+        // showTuple(bej_tuple_list, 0);
+        FILE *output_file = NULL;
+    
+        if ((output_file = fopen(ENCODEBEJ_OUTPUT_BINARY_FILE, "wb+")) != NULL)
+        {
+            // Write BEJ basic headers
+            outputBejBasicToFile(output_file);
+
+            // Write all tuples
+            outputBejEncodeResult(bej_tuple_list, output_file);
+        }
+        fclose(output_file);
     }
 
     return 0;
