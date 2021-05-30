@@ -452,7 +452,6 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
     case bejBoolean:
     default:
         outputBejTupleToFile(tuple, output_file);
-        free(tuple);
         // TODO : the other BEJ type
         // bejBytesString
         // bejChoice
