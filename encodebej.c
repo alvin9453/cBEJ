@@ -28,12 +28,6 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
             found_entry = dict->ChildInfo[i];
             break;
         }
-        else if (dict->ChildInfo[i]->ChildCount > 0)
-        {
-            found_entry = find_entry_from_dictionary(name, dict->ChildInfo[i]);
-            if (found_entry != NULL)
-                break;
-        }
     }
     return found_entry;
 }
@@ -57,6 +51,8 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     BejTuple_t *packed_result;
     int index = 0;
     const cJSON *obj = NULL;
+    EntryInfo_t *find_major_entry = major_dict;
+    EntryInfo_t *find_annotation_entry = annotation_dict;
 
     if(json->string == NULL) 
     {
@@ -68,8 +64,6 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     }
     else
     {
-        EntryInfo_t *find_major_entry = NULL;
-        EntryInfo_t *find_annotation_entry = NULL;
         if ((find_major_entry = find_entry_from_dictionary(json->string, major_dict)) != NULL)
         {
             bejS.seq = find_major_entry->SequenceNumber;
@@ -85,6 +79,8 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             bejS.annot_flag = 1;
 
             bejF.bejtype = find_annotation_entry->bejtype;
+            
+            find_major_entry = major_dict;
         }else
         {
             printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
@@ -111,16 +107,13 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
                 cJSON_ArrayForEach(obj, json)
                 {
-                    packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
+                    packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
                     if (packed_result == NULL)
                     {
-                        printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
+                        printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Object , current Json propert is \"%s\" \n", json->string);
                         return NULL;
                     }
-                    else
-                    {
-                        memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
-                    }
+                    memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
                 }
                 vset->tuples = vset_tuples_p;
             }
@@ -137,16 +130,13 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             varray_tuples_p = varray->tuples;
             cJSON_ArrayForEach(obj, json)
             {
-                packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
+                packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
                 if (packed_result == NULL)
                 {
                     printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
                     return NULL;
                 }
-                else
-                {
-                    memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
-                }
+                memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
             }
             varray->tuples = varray_tuples_p;
             bejV = varray;
@@ -161,8 +151,13 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             {
                 venum->name = malloc(strlen(json->valuestring) + 1);
                 memcpy((char *)venum->name, (char *)json->valuestring, strlen(json->valuestring) + 1);
-                EntryInfo_t *find_major_entry = find_entry_from_dictionary(json->valuestring, major_dict);
-                venum->nnint = find_major_entry->SequenceNumber;
+                EntryInfo_t *find_enum_entry = find_entry_from_dictionary(json->valuestring, find_major_entry);
+                if (find_enum_entry == NULL)
+                {
+                    printf(" - !!!! [DEBUG] ERROR find Enum member , current Json propert is \"%s\" \n", json->string);
+                    return NULL;
+                }
+                venum->nnint = find_enum_entry->SequenceNumber;
                 bejV = venum;
             }
             else
