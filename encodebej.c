@@ -10,6 +10,7 @@ extern int DEBUG;
 #ifdef ENCODE_TEST
 
 #define ENCODEBEJ_OUTPUT_BINARY_FILE "bejencode_result.bin"
+#define MAX_PROPERTY_NAME_LENGTH 512
 
 #define PRINT_LAYER(layer) \
    for(uint8_t i=0; i<(layer); i++) printf("    ")
@@ -22,7 +23,7 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
     EntryInfo_t *found_entry = NULL;
     for (uint16_t i = 0; i < dict->ChildCount; i++)
     {
-        if (strcmp(name, dict->ChildInfo[i]->Name) == 0)
+        if (strncmp(name, dict->ChildInfo[i]->Name, strnlen(name, MAX_PROPERTY_NAME_LENGTH) + 1) == 0)
         {
             found_entry = dict->ChildInfo[i];
             break;
@@ -267,10 +268,13 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         // bejReal
         break;
     }
-    if( strncmp(bejS->name, "root_tuple", strlen("root_tuple")) == 0){
+    if (strncmp(bejS->name, "root_tuple", strnlen(bejS->name, MAX_PROPERTY_NAME_LENGTH)) == 0)
+    {
         // root tuple only need to know the length of BejV
         return bejv_length;
-    }else{
+    }
+    else
+    {
         total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(BejTupleF_t) + sizeof(bejL) + bejv_length + another_nnint_count;
         return total_bej_tuple_slvf_length;
     }
