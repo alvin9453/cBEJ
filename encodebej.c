@@ -60,7 +60,8 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         bejS.name = "";
         bejS.annot_flag = 0;
 
-        bejF.bejtype = bejSet;
+        bejF.bejtype = major_dict->ChildInfo[0]->bejtype;
+        find_major_entry = major_dict->ChildInfo[0];
     }
     else
     {
@@ -95,6 +96,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     else
     {
         // BejV
+        nnint_t childseq = 0;
         switch (bejF.bejtype)
         {
         case bejSet:
@@ -136,6 +138,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
                     printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
                     return NULL;
                 }
+                packed_result->bejS.seq = childseq++;
                 memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
             }
             varray->tuples = varray_tuples_p;
@@ -222,20 +225,25 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         if (vset != NULL)
         {
             count = vset->count;
+            bejL +=  sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &vset->tuples[i];
-                bejL += set_tuple_length(bejtuple) + sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
+                bejL += set_tuple_length(bejtuple);
             }
         }
         break;
     case bejArray:
         varray = (bejArray_t *)tuple->bejV;
-        count = varray->count;
-        for (nnint_t i = 0; i < count; i++)
+        if(varray != NULL)
         {
-            bejtuple = &varray->tuples[i];
-            bejL += set_tuple_length(bejtuple);
+            count = varray->count;
+            bejL +=  sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
+            for (nnint_t i = 0; i < count; i++)
+            {
+                bejtuple = &varray->tuples[i];
+                bejL += set_tuple_length(bejtuple);
+            }
         }
         break;
     case bejString:
