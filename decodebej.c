@@ -10,7 +10,7 @@
 #include "cJSON.h"
 
 #define UNUSED(x) (void)(x)
-int DEBUG=0;
+int DEBUG=1;
 
 
 static inline void printBytes(uint8_t *input, size_t size)
@@ -170,7 +170,7 @@ void parseDict(ParseInfo_t *parseinfo, EntryInfo_t **entryinfos_ptr)
             entryinfos[i].Name = (uint8_t *)"";
         entryinfos[i].index = i;
     }
-    // showEntries(entryinfos, 0);
+    showEntries(entryinfos, 0);
     *entryinfos_ptr = entryinfos;
 }
 

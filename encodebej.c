@@ -97,87 +97,94 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         }
     }
 
-    // BejV
-    switch (bejF.bejtype)
+    if(json->type == cJSON_NULL)
     {
-    case bejSet:
-        vset = malloc(sizeof(bejSet_t));
-        vset->count = cJSON_GetArraySize(json);
-        if (cJSON_GetArraySize(json) != 0)
+        printf("  -- NULL\n");
+        bejV = NULL;
+    }
+    else
+    {
+        // BejV
+        switch (bejF.bejtype)
         {
-            vset->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
-            vset_tuples_p = vset->tuples;
+        case bejSet:
+            vset = malloc(sizeof(bejSet_t));
+            vset->count = cJSON_GetArraySize(json);
+            if (cJSON_GetArraySize(json) != 0)
+            {
+                vset->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
+                vset_tuples_p = vset->tuples;
 
+                cJSON_ArrayForEach(obj, json)
+                {
+                    packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
+                    if (packed_result != NULL)
+                    {
+                        memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
+                    }
+                }
+                vset->tuples = vset_tuples_p;
+            }
+            else
+            {
+                vset->tuples = NULL;
+            }
+            bejV = vset;
+            break;
+        case bejArray:
+            varray = malloc(sizeof(bejArray_t));
+            varray->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
+            varray->count = cJSON_GetArraySize(json);
+            varray_tuples_p = varray->tuples;
             cJSON_ArrayForEach(obj, json)
             {
                 packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
-                if (packed_result != NULL)
-                {
-                    memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
-                }
+                memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
             }
-            vset->tuples = vset_tuples_p;
+            varray->tuples = varray_tuples_p;
+            bejV = varray;
+            break;
+        case bejString:
+            bejV = malloc(strlen(json->valuestring) + 1);
+            memcpy(bejV, (char *)json->valuestring, strlen(json->valuestring) + 1);
+            break;
+        case bejEnum:
+            venum = malloc(sizeof(bejEnum_t));
+            if(json->type == cJSON_String)
+            {
+                venum->name = malloc(strlen(json->valuestring) + 1);
+                memcpy((char *)venum->name, (char *)json->valuestring, strlen(json->valuestring) + 1);
+                EntryInfo_t *find_major_entry = find_entry_from_dictionary(json->valuestring, major_dict);
+                venum->nnint = find_major_entry->SequenceNumber;
+                bejV = venum;
+            }
+            else
+            {
+                venum->name = NULL;
+                venum->nnint = 0;
+                bejV = venum;
+            }
+            break;
+        case bejInteger:
+            vinteger = malloc(sizeof(bejInteger_t));
+            vinteger->value = (bejint_t)json->valuedouble;
+            bejV = vinteger;
+            break;
+        case bejBoolean:
+            vbool = malloc(sizeof(bejBoolean_t));
+            if(json->type == cJSON_True)
+                vbool->value = 0xff;
+            else
+                vbool->value = 0x00;
+            bejV = vbool;
+            break;
+        case bejNull:
+            bejV = NULL;
+            break;
+        default:
+            break;
         }
-        else
-        {
-            vset->tuples = NULL;
-        }
-        bejV = vset;
-        break;
-    case bejArray:
-        varray = malloc(sizeof(bejArray_t));
-        varray->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
-        varray->count = cJSON_GetArraySize(json);
-        varray_tuples_p = varray->tuples;
-        cJSON_ArrayForEach(obj, json)
-        {
-            packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
-            memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
-        }
-        varray->tuples = varray_tuples_p;
-        bejV = varray;
-        break;
-    case bejString:
-        bejV = malloc(strlen(json->valuestring) + 1);
-        memcpy(bejV, (char *)json->valuestring, strlen(json->valuestring) + 1);
-        break;
-    case bejEnum:
-        venum = malloc(sizeof(bejEnum_t));
-        if(json->type == cJSON_String)
-        {
-            venum->name = malloc(strlen(json->valuestring) + 1);
-            memcpy((char *)venum->name, (char *)json->valuestring, strlen(json->valuestring) + 1);
-            EntryInfo_t *find_major_entry = find_entry_from_dictionary(json->valuestring, major_dict);
-            venum->nnint = find_major_entry->SequenceNumber;
-            bejV = venum;
-        }
-        else
-        {
-            venum->name = NULL;
-            venum->nnint = 0;
-            bejV = venum;
-        }
-        break;
-    case bejInteger:
-        vinteger = malloc(sizeof(bejInteger_t));
-        vinteger->value = (bejint_t)json->valuedouble;
-        bejV = vinteger;
-        break;
-    case bejBoolean:
-        vbool = malloc(sizeof(bejBoolean_t));
-        if(json->type == cJSON_True)
-            vbool->value = 0xff;
-        else
-            vbool->value = 0x00;
-        bejV = vbool;
-        break;
-    case bejNull:
-        bejV = NULL;
-        break;
-    default:
-        break;
     }
-
     BejTuple_t *bej_tuple = malloc(sizeof(BejTuple_t));
     bej_tuple->bejS = bejS;
     bej_tuple->bejF = bejF;
@@ -204,8 +211,7 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
     nnint_t count = 0;
     BejTuple_t *bejtuple;
     nnint_t total_bej_tuple_slvf_length = 0;
-    nnint_t bejv_length = 0;
-    nnint_t another_nnint_count = 2; // BejS and BejL
+    nnint_t another_nnint_count = 2; // BejS and BejL nnint bytes
 
     switch (bejF->bejtype)
     {
@@ -217,10 +223,8 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &vset->tuples[i];
-                bejL += set_tuple_length(bejtuple) + sizeof(nnint_t) + 1;
+                bejL += set_tuple_length(bejtuple) + sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
             }
-            bejv_length = bejL;
-            tuple->bejL = bejL;
         }
         break;
     case bejArray:
@@ -231,32 +235,29 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
             bejtuple = &varray->tuples[i];
             bejL += set_tuple_length(bejtuple);
         }
-        bejv_length = bejL;
-        tuple->bejL = bejL;
         break;
     case bejString:
         vstring = (bejString_t *)tuple->bejV;
-        bejL = strlen((const char *)vstring) + 1;
-        bejv_length = bejL;
-        tuple->bejL = bejL;
+        if(vstring != NULL)
+            bejL = strlen((const char *)vstring) + 1;
         break;
     case bejInteger:
         vinteger = (bejInteger_t *)tuple->bejV;
-        bejL = sizeof(vinteger->value);
-        tuple->bejL = bejL;
-        bejv_length = bejL;
+        if(vinteger != NULL)
+            bejL = sizeof(vinteger->value);
         break;
     case bejEnum:
         venum = (bejEnum_t *)tuple->bejV;
-        bejL = sizeof(venum->nnint) + 1; // one nnint byte;
-        tuple->bejL = bejL;
-        bejv_length = bejL;
+        if (venum != NULL)
+            bejL = sizeof(venum->nnint) + 1; // one nnint byte;
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
-        bejL = sizeof(vbool->value);
-        tuple->bejL = bejL;
-        bejv_length = bejL;
+        if(vbool != NULL)
+            bejL = sizeof(vbool->value);
+        break;
+    case bejNull:
+        bejL = 0;
         break;
     default:
         // TODO : the other BEJ type
@@ -268,14 +269,15 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         // bejReal
         break;
     }
+    tuple->bejL = bejL;
     if (strncmp(bejS->name, "root_tuple", strnlen(bejS->name, MAX_PROPERTY_NAME_LENGTH)) == 0)
     {
         // root tuple only need to know the length of BejV
-        return bejv_length;
+        return bejL;
     }
     else
     {
-        total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(BejTupleF_t) + sizeof(bejL) + bejv_length + another_nnint_count;
+        total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(BejTupleF_t) + sizeof(BejTupleL_t) + bejL + another_nnint_count;
         return total_bej_tuple_slvf_length;
     }
 }
@@ -331,12 +333,18 @@ void showTuple(BejTuple_t *tuple, int layer)
         break;
     case bejEnum:
         venum = (bejEnum_t *)tuple->bejV;
-        printf(" - [%d] %s , \"bejEnum\", L = %d, value = (%d)%s\n", bejS->seq, bejS->name, *bejL, venum->nnint, venum->name);
+        printf(" - [%d] %s , \"bejEnum\", L = %d, ", bejS->seq, bejS->name, *bejL);
+        if(venum != NULL)
+            printf(" value = (%d)%s\n", venum->nnint, venum->name);
+        else
+            printf(" value = NULL\n");
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
         printf(" - [%d] %s , \"bejBoolean\", L = %d, value = %s\n", bejS->seq, bejS->name, *bejL, vbool->value == 0x00 ? "false" : "true");
         break;
+    case bejNull:
+        printf(" - [%d] %s , \"bejNull\", L = %d\n value = null", bejS->seq, bejS->name, *bejL);
     default:
         // TODO : the other BEJ type
         // bejBytesString
@@ -374,32 +382,64 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
 
         // Write BejL
         fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-        fwrite(bejL, sizeof(BejTupleL_t),1, output_file);
+        fwrite(bejL, sizeof(BejTupleL_t), 1, output_file);
 
-        switch (bejF->bejtype)
+        if(DEBUG)
         {
-        case bejSet:
-            vset = (bejSet_t *)tuple->bejV;
-            count = vset->count;
+            printf(" S = %02x %06x , ", nnint_size, seq);
+            printf(" F = %02x (%s) , ", bejF->bejtype, getBejtypeName(bejF->bejtype));
+            printf(" L = %02x %06x , ", nnint_size, *bejL);
+        }
+        
+        if(*bejL > 0)
+        {
+            switch (bejF->bejtype)
+            {
+            case bejSet:
+                vset = (bejSet_t *)tuple->bejV;
+                count = vset->count;
 
-            fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-            fwrite(&count, sizeof(nnint_t),1, output_file);
-            break;
-        case bejArray:
-            varray = (bejArray_t *)tuple->bejV;
-            count = varray->count;
+                fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+                fwrite(&count, sizeof(nnint_t),1, output_file);
 
-            fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-            fwrite(&count, sizeof(nnint_t), 1, output_file);
-            break;
-        case bejEnum:
-            venum = (bejEnum_t *)tuple->bejV;
-            fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-            fwrite(&venum->nnint, sizeof(nnint_t), 1, output_file);
-            break;
-        default:
-            fwrite(tuple->bejV, *bejL, 1, output_file);
-            break;
+                if(DEBUG)
+                {
+                    printf(" V = %02x %06x\n", nnint_size, count);
+                } 
+                break;
+            case bejArray:
+                varray = (bejArray_t *)tuple->bejV;
+                count = varray->count;
+
+                fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+                fwrite(&count, sizeof(nnint_t), 1, output_file);
+                if (DEBUG)
+                {
+                    printf(" V = %02x %06x\n", nnint_size, count);
+                }
+                break;
+            case bejEnum:
+                venum = (bejEnum_t *)tuple->bejV;
+                fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
+                fwrite(&venum->nnint, sizeof(nnint_t), 1, output_file);
+
+                if (DEBUG)
+                {
+                    printf(" V = %02x %06x\n", nnint_size, venum->nnint);
+                }
+                break;
+            case bejNull:
+                break;
+            default:
+                fwrite(tuple->bejV, *bejL, 1, output_file);
+                if (DEBUG)
+                {
+                    printf(" V = %02x %06x\n", nnint_size, venum->nnint);
+                }
+                break;
+            }
+        }else{
+            printf(" V = NULL\n");
         }
     }
 }
@@ -454,6 +494,7 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
     case bejInteger:
     case bejEnum:
     case bejBoolean:
+    case bejNull:
     default:
         outputBejTupleToFile(tuple, output_file);
         // TODO : the other BEJ type
@@ -552,7 +593,7 @@ int main(int argc, char *argv[])
 
         BejTuple_t *bej_tuple_list = encodeJsonToBinary(cjson_input, entryinfos, annotation_infos);
 
-        // showTuple(bej_tuple_list, 0);
+        showTuple(bej_tuple_list, 0);
         FILE *output_file = NULL;
     
         if ((output_file = fopen(ENCODEBEJ_OUTPUT_BINARY_FILE, "wb+")) != NULL)

@@ -3,4 +3,5 @@
 *.json
 test.*
 encodebej
+decodebej
 bejencode_result.bin
