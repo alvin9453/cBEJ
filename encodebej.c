@@ -68,29 +68,24 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     }
     else
     {
-        EntryInfo_t *find_major_entry = find_entry_from_dictionary(json->string, major_dict);
-        if (find_major_entry != NULL)
+        EntryInfo_t *find_major_entry = NULL;
+        EntryInfo_t *find_annotation_entry = NULL;
+        if ((find_major_entry = find_entry_from_dictionary(json->string, major_dict)) != NULL)
         {
             bejS.seq = find_major_entry->SequenceNumber;
             bejS.name = find_major_entry->Name;
             bejS.annot_flag = 0;
 
-            // BejTupleF_t
             bejF.bejtype = find_major_entry->bejtype;
         }
-
-        // Set annotation flag
-        EntryInfo_t *find_annotation_entry = find_entry_from_dictionary(json->string, annotation_dict);
-        if (find_annotation_entry != NULL)
+        else if ((find_annotation_entry = find_entry_from_dictionary(json->string, annotation_dict)) != NULL)
         {
             bejS.seq = find_annotation_entry->SequenceNumber;
             bejS.name = find_annotation_entry->Name;
             bejS.annot_flag = 1;
 
             bejF.bejtype = find_annotation_entry->bejtype;
-        }
-
-        if (find_major_entry == NULL && find_annotation_entry == NULL)
+        }else
         {
             printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
             return NULL;
@@ -99,7 +94,6 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
     if(json->type == cJSON_NULL)
     {
-        printf("  -- NULL\n");
         bejV = NULL;
     }
     else
@@ -118,7 +112,12 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
                 cJSON_ArrayForEach(obj, json)
                 {
                     packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
-                    if (packed_result != NULL)
+                    if (packed_result == NULL)
+                    {
+                        printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
+                        return NULL;
+                    }
+                    else
                     {
                         memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
                     }
@@ -139,7 +138,15 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             cJSON_ArrayForEach(obj, json)
             {
                 packed_result = pack_json_to_sfv(obj, major_dict, annotation_dict);
-                memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
+                if (packed_result == NULL)
+                {
+                    printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
+                    return NULL;
+                }
+                else
+                {
+                    memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
+                }
             }
             varray->tuples = varray_tuples_p;
             bejV = varray;
@@ -544,10 +551,6 @@ BejTuple_t *encodeJsonToBinary(cJSON *json_input, EntryInfo_t *major_dict, Entry
     bejv_length = set_tuple_length(root_bej_tuple);
     root_bej_tuple->bejL = bejv_length;
 
-    if(DEBUG){
-        showTuple(root_bej_tuple, 0);
-    }
-
     return root_bej_tuple;
 }
 
@@ -596,7 +599,10 @@ int main(int argc, char *argv[])
 
         BejTuple_t *bej_tuple_list = encodeJsonToBinary(cjson_input, entryinfos, annotation_infos);
 
-        showTuple(bej_tuple_list, 0);
+        if(DEBUG)
+        {
+            showTuple(bej_tuple_list, 0);
+        }
         FILE *output_file = NULL;
     
         if ((output_file = fopen(ENCODEBEJ_OUTPUT_BINARY_FILE, "wb+")) != NULL)
