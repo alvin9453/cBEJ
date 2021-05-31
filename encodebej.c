@@ -439,7 +439,10 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
                 break;
             }
         }else{
-            printf(" V = NULL\n");
+            if(DEBUG)
+            {
+                printf(" V = NULL\n");
+            }
         }
     }
 }
