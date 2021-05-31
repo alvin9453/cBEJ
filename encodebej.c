@@ -165,9 +165,9 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     case bejBoolean:
         vbool = malloc(sizeof(bejBoolean_t));
         if(json->type == cJSON_True)
-            vbool->value = 0x00;
-        else
             vbool->value = 0xff;
+        else
+            vbool->value = 0x00;
         bejV = vbool;
         break;
     case bejNull:
@@ -247,9 +247,9 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         break;
     case bejEnum:
         venum = (bejEnum_t *)tuple->bejV;
-        bejL = sizeof(venum->nnint);
+        bejL = sizeof(venum->nnint) + 1; // one nnint byte;
         tuple->bejL = bejL;
-        bejv_length = bejL + 1; // one nnint byte
+        bejv_length = bejL;
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
@@ -331,7 +331,7 @@ void showTuple(BejTuple_t *tuple, int layer)
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
-        printf(" - [%d] %s , \"bejBoolean\", L = %d, value = %s\n", bejS->seq, bejS->name, *bejL, vbool->value == 0x00 ? "true" : "false");
+        printf(" - [%d] %s , \"bejBoolean\", L = %d, value = %s\n", bejS->seq, bejS->name, *bejL, vbool->value == 0x00 ? "false" : "true");
         break;
     default:
         // TODO : the other BEJ type
@@ -357,7 +357,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
     nnint_t count = 0;
     uint8_t nnint_size = sizeof(nnint_t);
     nnint_t annotation_flag = bejS->annot_flag;
-    nnint_t seq = bejS->seq << 1 + annotation_flag;
+    nnint_t seq = bejS->seq << 1 | !!annotation_flag;
 
     if (output_file != NULL)
     {
