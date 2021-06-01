@@ -12,8 +12,15 @@ extern int DEBUG;
 #define ENCODEBEJ_OUTPUT_BINARY_FILE "bejencode_result.bin"
 #define MAX_PROPERTY_NAME_LENGTH 512
 
+#define ERROR_INVALID_JSON_INPUT 0x01
+#define ERROR_ENTRY_NOT_FOUND_IN_DICTIONARY 0x02
+#define ERROR_JSON_TYPE_NOT_MATCH_BEJ_TYPE 0x03
+
+
 #define PRINT_LAYER(layer) \
    for(uint8_t i=0; i<(layer); i++) printf("    ")
+
+static uint8_t errno = 0x00;
 
 EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
 {
@@ -85,11 +92,12 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         }else
         {
             printf(" - !!!! [DEBUG] ERROR, cannot find \"%s\" property in dictionary.\n", json->string);
+            errno = ERROR_ENTRY_NOT_FOUND_IN_DICTIONARY;
             return NULL;
         }
     }
 
-    if(json->type == cJSON_NULL)
+    if(cJSON_IsNull(json))
     {
         bejV = NULL;
     }
@@ -153,6 +161,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             }
             else{
                 printf(" - !!!! [DEBUG] ERROR bejArray should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
+                errno = ERROR_JSON_TYPE_NOT_MATCH_BEJ_TYPE;
                 return NULL;
             }
             break;
@@ -163,6 +172,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             }
             else {
                 printf(" - !!!! [DEBUG] ERROR bejString should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
+                errno = ERROR_JSON_TYPE_NOT_MATCH_BEJ_TYPE;
                 return NULL;
             }
             break;
@@ -176,6 +186,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
                 if (find_enum_entry == NULL)
                 {
                     printf(" - !!!! [DEBUG] ERROR find Enum member , current Json propert is \"%s\" \n", json->string);
+                    errno = ERROR_ENTRY_NOT_FOUND_IN_DICTIONARY;
                     return NULL;
                 }
                 venum->nnint = find_enum_entry->SequenceNumber;
@@ -184,6 +195,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             else
             {
                 printf(" - !!!! [DEBUG] ERROR bejEnum should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
+                errno = ERROR_JSON_TYPE_NOT_MATCH_BEJ_TYPE;
                 return NULL;
             }
             break;
@@ -195,6 +207,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             }
             else {
                 printf(" - !!!! [DEBUG] ERROR bejInteger should input Json number, current Json propert is \"%s\" \n", json->string?json->string:"");
+                errno = ERROR_JSON_TYPE_NOT_MATCH_BEJ_TYPE;
                 return NULL;
             }
             break;
@@ -209,6 +222,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             }
             else {
                 printf(" - !!!! [DEBUG] ERROR bejBoolean should input Json bool, current Json propert is \"%s\" \n", json->string?json->string:"");
+                errno = ERROR_JSON_TYPE_NOT_MATCH_BEJ_TYPE;
                 return NULL;
             }
             break;
@@ -443,7 +457,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
 
                 if(DEBUG)
                 {
-                    printf(" V = %02x %06x\n", nnint_size, count);
+                    printf(" V(count) = %02x %06x\n", nnint_size, count);
                 } 
                 break;
             case bejArray:
@@ -454,7 +468,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
                 fwrite(&count, sizeof(nnint_t), 1, output_file);
                 if (DEBUG)
                 {
-                    printf(" V = %02x %06x\n", nnint_size, count);
+                    printf(" V(count) = %02x %06x\n", nnint_size, count);
                 }
                 break;
             case bejEnum:
@@ -569,7 +583,12 @@ BejTuple_t *encodeJsonToBinary(cJSON *json_input, EntryInfo_t *major_dict, Entry
     cJSON_ArrayForEach(obj, json_input)
     {
         BejTuple_t *tuple = pack_json_to_sfv(obj, major_dict, annotation_dict);
-        // printf(" [DEBUG] seq = %d, name = %s, annotation_flag = %d, type = %s\n", tuple->bejS.seq, tuple->bejS.name, tuple->bejS.annot_flag, getBejtypeName(tuple->bejF.bejtype));
+
+        if(tuple == NULL)
+        {
+            printf(" [ERROR] failed to parse JSON into BEJ tuple \n");
+            return NULL;
+        }
         memcpy(root_bej_V_init_ptr, tuple, sizeof(BejTuple_t));
 
         root_bej_V_init_ptr++;
@@ -627,25 +646,36 @@ int main(int argc, char *argv[])
         if(cJSON_IsInvalid(cjson_input))
         {
             printf(" - [ERROR] not a valid json \n");
+            errno = ERROR_INVALID_JSON_INPUT;
         }
-
-        BejTuple_t *bej_tuple_list = encodeJsonToBinary(cjson_input, entryinfos, annotation_infos);
-
-        if(DEBUG)
+        else
         {
-            showTuple(bej_tuple_list, 0);
-        }
-        FILE *output_file = NULL;
-    
-        if ((output_file = fopen(ENCODEBEJ_OUTPUT_BINARY_FILE, "wb+")) != NULL)
-        {
-            // Write BEJ basic headers
-            outputBejBasicToFile(output_file);
+            BejTuple_t *bej_tuple_list = encodeJsonToBinary(cjson_input, entryinfos, annotation_infos);
+            if (bej_tuple_list == NULL)
+            {
+                printf(" [ERROR] failed to parse JSON into BEJ tuple \n");
+            }
+            else
+            {
+                if (DEBUG)
+                {
+                    showTuple(bej_tuple_list, 0);
+                }
+                FILE *output_file = NULL;
 
-            // Write all tuples
-            outputBejEncodeResult(bej_tuple_list, output_file);
+                if ((output_file = fopen(ENCODEBEJ_OUTPUT_BINARY_FILE, "wb+")) != NULL)
+                {
+                    // Write BEJ basic headers
+                    outputBejBasicToFile(output_file);
+
+                    // Write all tuples
+                    outputBejEncodeResult(bej_tuple_list, output_file);
+                }
+                fclose(output_file);
+            }
         }
-        fclose(output_file);
+        if(errno != 0)
+            printf(" [ERROR] Found there is an error, error no : %02x\n", errno);
     }
 
     return 0;
