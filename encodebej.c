@@ -40,7 +40,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
     BejTupleS_t bejS;
     BejTupleF_t bejF;
-    void *bejV;
+    void *bejV = NULL;
     bejSet_t *vset;
     bejArray_t *varray;
     bejInteger_t *vinteger;
@@ -60,7 +60,8 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         bejS.name = "";
         bejS.annot_flag = 0;
 
-        bejF.bejtype = bejSet;
+        bejF.bejtype = major_dict->ChildInfo[0]->bejtype;
+        find_major_entry = major_dict->ChildInfo[0];
     }
     else
     {
@@ -95,60 +96,80 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     else
     {
         // BejV
+        nnint_t childseq = 0;
         switch (bejF.bejtype)
         {
         case bejSet:
-            vset = malloc(sizeof(bejSet_t));
-            vset->count = cJSON_GetArraySize(json);
-            if (cJSON_GetArraySize(json) != 0)
-            {
-                vset->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
-                vset_tuples_p = vset->tuples;
+            if(cJSON_IsObject(json)) {
+                vset = malloc(sizeof(bejSet_t));
+                vset->count = cJSON_GetArraySize(json);
+                if (cJSON_GetArraySize(json) != 0)
+                {
+                    vset->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
+                    vset_tuples_p = vset->tuples;
 
+                    cJSON_ArrayForEach(obj, json)
+                    {
+                        packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
+                        if (packed_result == NULL)
+                        {
+                            printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Object , current Json propert is \"%s\" \n", json->string);
+                            return NULL;
+                        }
+                        memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
+                    }
+                    vset->tuples = vset_tuples_p;
+                }
+                else
+                {
+                    vset->tuples = NULL;
+                }
+                bejV = vset;
+            }
+            else {
+                printf(" - !!!! [DEBUG] ERROR bejSet should input Json object, current Json propert is \"%s\" \n", json->string?json->string:"");
+                return NULL;
+            }
+            break;
+        case bejArray:
+            if(cJSON_IsArray(json)) {
+                varray = malloc(sizeof(bejArray_t));
+                varray->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
+                varray->count = cJSON_GetArraySize(json);
+                varray_tuples_p = varray->tuples;
                 cJSON_ArrayForEach(obj, json)
                 {
                     packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
                     if (packed_result == NULL)
                     {
-                        printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Object , current Json propert is \"%s\" \n", json->string);
+                        printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
                         return NULL;
                     }
-                    memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
+                    packed_result->bejS.seq = childseq++;
+                    memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
                 }
-                vset->tuples = vset_tuples_p;
+                varray->tuples = varray_tuples_p;
+                bejV = varray;
             }
-            else
-            {
-                vset->tuples = NULL;
+            else{
+                printf(" - !!!! [DEBUG] ERROR bejArray should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
+                return NULL;
             }
-            bejV = vset;
-            break;
-        case bejArray:
-            varray = malloc(sizeof(bejArray_t));
-            varray->tuples = malloc(cJSON_GetArraySize(json) * sizeof(BejTuple_t));
-            varray->count = cJSON_GetArraySize(json);
-            varray_tuples_p = varray->tuples;
-            cJSON_ArrayForEach(obj, json)
-            {
-                packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
-                if (packed_result == NULL)
-                {
-                    printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
-                    return NULL;
-                }
-                memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
-            }
-            varray->tuples = varray_tuples_p;
-            bejV = varray;
             break;
         case bejString:
-            bejV = malloc(strlen(json->valuestring) + 1);
-            memcpy(bejV, (char *)json->valuestring, strlen(json->valuestring) + 1);
+            if(cJSON_IsString(json)) {
+                bejV = malloc(strlen(json->valuestring) + 1);
+                memcpy(bejV, (char *)json->valuestring, strlen(json->valuestring) + 1);
+            }
+            else {
+                printf(" - !!!! [DEBUG] ERROR bejString should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
+                return NULL;
+            }
             break;
         case bejEnum:
-            venum = malloc(sizeof(bejEnum_t));
-            if(json->type == cJSON_String)
+            if(cJSON_IsString(json))
             {
+                venum = malloc(sizeof(bejEnum_t));
                 venum->name = malloc(strlen(json->valuestring) + 1);
                 memcpy((char *)venum->name, (char *)json->valuestring, strlen(json->valuestring) + 1);
                 EntryInfo_t *find_enum_entry = find_entry_from_dictionary(json->valuestring, find_major_entry);
@@ -162,23 +183,34 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             }
             else
             {
-                venum->name = NULL;
-                venum->nnint = 0;
-                bejV = venum;
+                printf(" - !!!! [DEBUG] ERROR bejEnum should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
+                return NULL;
             }
             break;
         case bejInteger:
-            vinteger = malloc(sizeof(bejInteger_t));
-            vinteger->value = (bejint_t)json->valuedouble;
-            bejV = vinteger;
+            if(cJSON_IsNumber(json)){
+                vinteger = malloc(sizeof(bejInteger_t));
+                vinteger->value = (bejint_t)json->valuedouble;
+                bejV = vinteger;
+            }
+            else {
+                printf(" - !!!! [DEBUG] ERROR bejInteger should input Json number, current Json propert is \"%s\" \n", json->string?json->string:"");
+                return NULL;
+            }
             break;
         case bejBoolean:
-            vbool = malloc(sizeof(bejBoolean_t));
-            if(json->type == cJSON_True)
-                vbool->value = 0xff;
-            else
-                vbool->value = 0x00;
-            bejV = vbool;
+            if(cJSON_IsBool(json)){
+                vbool = malloc(sizeof(bejBoolean_t));
+                if(json->type == cJSON_True)
+                    vbool->value = 0xff;
+                else
+                    vbool->value = 0x00;
+                bejV = vbool;
+            }
+            else {
+                printf(" - !!!! [DEBUG] ERROR bejBoolean should input Json bool, current Json propert is \"%s\" \n", json->string?json->string:"");
+                return NULL;
+            }
             break;
         case bejNull:
             bejV = NULL;
@@ -222,20 +254,25 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         if (vset != NULL)
         {
             count = vset->count;
+            bejL +=  sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &vset->tuples[i];
-                bejL += set_tuple_length(bejtuple) + sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
+                bejL += set_tuple_length(bejtuple);
             }
         }
         break;
     case bejArray:
         varray = (bejArray_t *)tuple->bejV;
-        count = varray->count;
-        for (nnint_t i = 0; i < count; i++)
+        if(varray != NULL)
         {
-            bejtuple = &varray->tuples[i];
-            bejL += set_tuple_length(bejtuple);
+            count = varray->count;
+            bejL +=  sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
+            for (nnint_t i = 0; i < count; i++)
+            {
+                bejtuple = &varray->tuples[i];
+                bejL += set_tuple_length(bejtuple);
+            }
         }
         break;
     case bejString:
