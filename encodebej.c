@@ -61,7 +61,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     EntryInfo_t *find_major_entry = major_dict;
     EntryInfo_t *find_annotation_entry = annotation_dict;
 
-    if(json->string == NULL) 
+    if(json->string == NULL)
     {
         bejS.seq = 0;
         bejS.name = "NOSHOW";
@@ -87,7 +87,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             bejS.annot_flag = 1;
 
             bejF.bejtype = find_annotation_entry->bejtype;
-            
+
             find_major_entry = major_dict;
         }else
         {
@@ -244,6 +244,18 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
 }
 
+nnint_t get_nnint_len(nnint_t nnint)
+{
+    if(nnint < 1<<8)
+        return 2;
+    else if(nnint < 1<<16)
+        return 3;
+    else if(nnint < 1<<24)
+        return 4;
+    else
+        return 5;
+}
+
 // Calculate tye BejL based on the pack_json_to_sfv result
 nnint_t set_tuple_length(BejTuple_t *tuple)
 {
@@ -259,7 +271,6 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
     nnint_t count = 0;
     BejTuple_t *bejtuple;
     nnint_t total_bej_tuple_slvf_length = 0;
-    nnint_t another_nnint_count = 2; // BejS and BejL nnint bytes
 
     switch (bejF->bejtype)
     {
@@ -268,7 +279,7 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         if (vset != NULL)
         {
             count = vset->count;
-            bejL +=  sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
+            bejL += get_nnint_len(count);
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &vset->tuples[i];
@@ -281,7 +292,7 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         if(varray != NULL)
         {
             count = varray->count;
-            bejL +=  sizeof(nnint_t) + 1; //  [ sizeof(nnint_t) + 1 ] is for set member count
+            bejL += get_nnint_len(count);
             for (nnint_t i = 0; i < count; i++)
             {
                 bejtuple = &varray->tuples[i];
@@ -302,7 +313,7 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
     case bejEnum:
         venum = (bejEnum_t *)tuple->bejV;
         if (venum != NULL)
-            bejL = sizeof(venum->nnint) + 1; // one nnint byte;
+            bejL = get_nnint_len(venum->nnint);
         break;
     case bejBoolean:
         vbool = (bejBoolean_t *)tuple->bejV;
@@ -323,14 +334,15 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
         break;
     }
     tuple->bejL = bejL;
-    if (strncmp(bejS->name, "root_tuple", strnlen(bejS->name, MAX_PROPERTY_NAME_LENGTH)) == 0)
+    if (strncmp(bejS->name, "root_tuple", strnlen(bejS->name, MAX_PROPERTY_NAME_LENGTH)+1) == 0)
     {
         // root tuple only need to know the length of BejV
         return bejL;
     }
     else
     {
-        total_bej_tuple_slvf_length = sizeof(bejS->seq) + sizeof(BejTupleF_t) + sizeof(BejTupleL_t) + bejL + another_nnint_count;
+        total_bej_tuple_slvf_length = get_nnint_len(bejS->seq<<1 | !!bejS->annot_flag) + sizeof(BejTupleF_t) +
+            get_nnint_len(bejL) + bejL;
         return total_bej_tuple_slvf_length;
     }
 }
@@ -410,6 +422,13 @@ void showTuple(BejTuple_t *tuple, int layer)
     }
 }
 
+void write_nnint(nnint_t nnint, FILE *output_file)
+{
+    uint8_t len = (uint8_t) get_nnint_len(nnint) - 1;
+    fwrite(&len, 1, sizeof(len), output_file);
+    fwrite(&nnint, 1, (size_t)len, output_file);
+}
+
 void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
 {
     BejTupleS_t *bejS = &tuple->bejS;
@@ -427,23 +446,21 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
     if (output_file != NULL)
     {
         // Write BejS
-        fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-        fwrite(&seq, sizeof(nnint_t), 1, output_file);
+        write_nnint(seq, output_file);
 
         // Write BejF
-        fwrite(bejF, sizeof(BejTupleF_t), 1, output_file);
+        fwrite(bejF, 1, sizeof(BejTupleF_t), output_file);
 
         // Write BejL
-        fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-        fwrite(bejL, sizeof(BejTupleL_t), 1, output_file);
+        write_nnint(*bejL, output_file);
 
         if(DEBUG)
         {
-            printf(" S = %02x %06x , ", nnint_size, seq);
-            printf(" F = %02x (%s) , ", bejF->bejtype, getBejtypeName(bejF->bejtype));
-            printf(" L = %02x %06x , ", nnint_size, *bejL);
+            printf(" S = %02x %0*x , ", get_nnint_len(seq), get_nnint_len(seq), seq);
+            printf(" F = %x (%s) , ", bejF->bejtype, getBejtypeName(bejF->bejtype));
+            printf(" L = %02x %0*x , ", get_nnint_len(*bejL), get_nnint_len(*bejL), *bejL);
         }
-        
+
         if(*bejL > 0)
         {
             switch (bejF->bejtype)
@@ -452,42 +469,39 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
                 vset = (bejSet_t *)tuple->bejV;
                 count = vset->count;
 
-                fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-                fwrite(&count, sizeof(nnint_t),1, output_file);
+                write_nnint(count, output_file);
 
                 if(DEBUG)
                 {
-                    printf(" V(count) = %02x %06x\n", nnint_size, count);
+                    printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
                 } 
                 break;
             case bejArray:
                 varray = (bejArray_t *)tuple->bejV;
                 count = varray->count;
 
-                fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-                fwrite(&count, sizeof(nnint_t), 1, output_file);
+                write_nnint(count, output_file);
                 if (DEBUG)
                 {
-                    printf(" V(count) = %02x %06x\n", nnint_size, count);
+                    printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
                 }
                 break;
             case bejEnum:
                 venum = (bejEnum_t *)tuple->bejV;
-                fwrite(&nnint_size, sizeof(uint8_t), 1, output_file);
-                fwrite(&venum->nnint, sizeof(nnint_t), 1, output_file);
+                write_nnint(venum->nnint, output_file);
 
                 if (DEBUG)
                 {
-                    printf(" V = %02x %06x\n", nnint_size, venum->nnint);
+                    printf(" V = %02x %02x\n", get_nnint_len(venum->nnint), venum->nnint);
                 }
                 break;
             case bejNull:
                 break;
             default:
-                fwrite(tuple->bejV, *bejL, 1, output_file);
+                fwrite(tuple->bejV, 1, *bejL, output_file);
                 if (DEBUG)
                 {
-                    printf(" V = %02x %06x\n", nnint_size, venum->nnint);
+                    //printf(" V = %02x %06x\n", nnint_size, venum->nnint);
                 }
                 break;
             }
@@ -596,7 +610,7 @@ BejTuple_t *encodeJsonToBinary(cJSON *json_input, EntryInfo_t *major_dict, Entry
     root_bej_set->tuples = malloc(sizeof(BejTuple_t));
     root_bej_set->tuples = root_bej_V;
     root_bej_set->count = cJSON_GetArraySize(json_input);
-    root_bej_tuple->bejV = root_bej_set;  
+    root_bej_tuple->bejV = root_bej_set;
 
     nnint_t bejv_length = 0;
     bejv_length = set_tuple_length(root_bej_tuple);
