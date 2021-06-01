@@ -672,6 +672,7 @@ int main(int argc, char *argv[])
                     outputBejEncodeResult(bej_tuple_list, output_file);
                 }
                 fclose(output_file);
+                free(bej_tuple_list);
             }
         }
         if(errno != 0)
