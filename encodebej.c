@@ -64,7 +64,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     if(json->string == NULL) 
     {
         bejS.seq = 0;
-        bejS.name = "";
+        bejS.name = "<SET>";
         bejS.annot_flag = 0;
 
         bejF.bejtype = major_dict->ChildInfo[0]->bejtype;
@@ -354,7 +354,7 @@ void showTuple(BejTuple_t *tuple, int layer)
     switch (bejF->bejtype)
     {
     case bejSet:
-        printf(" - [%d] %s , \"bejSet\", L = %d \n", bejS->seq, bejS->name == "" ? "<SET>" : bejS->name, *bejL);
+        printf(" - [%d] %s , \"bejSet\", L = %d \n", bejS->seq, bejS->name, *bejL);
         vset = (bejSet_t *)tuple->bejV;
         if (vset != NULL)
         {
