@@ -118,7 +118,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
 
                     cJSON_ArrayForEach(obj, json)
                     {
-                        packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
+                        packed_result = pack_json_to_sfv(obj, find_major_entry, annotation_dict);
                         if (packed_result == NULL)
                         {
                             printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Object , current Json propert is \"%s\" \n", json->string);
@@ -147,7 +147,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
                 varray_tuples_p = varray->tuples;
                 cJSON_ArrayForEach(obj, json)
                 {
-                    packed_result = pack_json_to_sfv(obj, find_major_entry, find_annotation_entry);
+                    packed_result = pack_json_to_sfv(obj, find_major_entry, annotation_dict);
                     if (packed_result == NULL)
                     {
                         printf(" - !!!! [DEBUG] ERROR while pack json into tuple in Json Array , current Json propert is \"%s\" \n", json->string);
