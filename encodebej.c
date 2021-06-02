@@ -125,6 +125,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
                             return NULL;
                         }
                         memcpy(&vset->tuples[index++], packed_result, sizeof(*packed_result));
+                        free(packed_result);
                     }
                     vset->tuples = vset_tuples_p;
                 }
@@ -155,6 +156,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
                     }
                     packed_result->bejS.seq = childseq++;
                     memcpy(&varray->tuples[index++], packed_result, sizeof(BejTuple_t));
+                    free(packed_result);
                 }
                 varray->tuples = varray_tuples_p;
                 bejV = varray;
@@ -530,6 +532,7 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
     bejInteger_t *vinteger;
     bejString_t *vstring;
     bejBoolean_t *vbool;
+    bejEnum_t *venum;
     nnint_t count;
     BejTuple_t *bejtuple;
 
@@ -547,7 +550,10 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
                 outputBejEncodeResult(bejtuple, output_file);
             }
         }
-        free(tuple->bejV);
+        free(vset->tuples);
+        vset->tuples = NULL;
+        free(vset);
+        vset = NULL;
         break;
     case bejArray:
         outputBejTupleToFile(tuple, output_file);
@@ -558,15 +564,34 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
             bejtuple = &varray->tuples[i];
             outputBejEncodeResult(bejtuple, output_file);
         }
-        free(tuple->bejV);
+        free(varray->tuples);
+        varray->tuples = NULL;
+        free(varray);
+        varray = NULL;
         break;
     case bejString:
-    case bejInteger:
+        outputBejTupleToFile(tuple, output_file);
+        free(tuple->bejV);
+        tuple->bejV = NULL;
+        break;
     case bejEnum:
+        outputBejTupleToFile(tuple, output_file);
+        venum = (bejEnum_t *)tuple->bejV;
+        if(venum != NULL){
+            if (venum->name != NULL)
+                free(venum->name);
+            free(venum);
+        }
+            
+        
+        break;
+    case bejInteger:
     case bejBoolean:
     case bejNull:
     default:
         outputBejTupleToFile(tuple, output_file);
+        free((void *)tuple->bejV);
+        tuple->bejV = NULL;
         // TODO : the other BEJ type
         // bejBytesString
         // bejChoice
@@ -604,10 +629,10 @@ BejTuple_t *encodeJsonToBinary(cJSON *json_input, EntryInfo_t *major_dict, Entry
             return NULL;
         }
         memcpy(root_bej_V_init_ptr, tuple, sizeof(BejTuple_t));
+        free(tuple);
 
         root_bej_V_init_ptr++;
     }
-    root_bej_set->tuples = malloc(sizeof(BejTuple_t));
     root_bej_set->tuples = root_bej_V;
     root_bej_set->count = cJSON_GetArraySize(json_input);
     root_bej_tuple->bejV = root_bej_set;
