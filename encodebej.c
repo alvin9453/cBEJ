@@ -9,6 +9,8 @@ extern int DEBUG;
 
 #ifdef ENCODE_TEST
 
+#define BEJ_VERSION 0xF1F0F000 // BEJ Version; shall be 1.0.0 (0xF1F0F000) for spec DSP0218_1.0.1
+
 #define ENCODEBEJ_OUTPUT_BINARY_FILE "bejencode_result.bin"
 #define MAX_PROPERTY_NAME_LENGTH 512
 
@@ -518,7 +520,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
 
 void outputBejBasicToFile(FILE *output_file)
 {
-    BejBasic_t bej_basic = {.ver32 = 0xF1F0F000, .flags = 0, .schemaclass = 0}; // DSP0218_1.0.1
+    BejBasic_t bej_basic = {.ver32 = BEJ_VERSION, .flags = 0, .schemaclass = 0}; 
     fwrite(&bej_basic, sizeof(bej_basic), 1, output_file);
 }
 
