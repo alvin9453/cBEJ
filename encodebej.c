@@ -549,30 +549,28 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
                 bejtuple = &vset->tuples[i];
                 outputBejEncodeResult(bejtuple, output_file);
             }
+            free(vset->tuples);
+            vset->tuples = NULL;
+            free(vset);
+            vset = NULL;
         }
-        free(vset->tuples);
-        vset->tuples = NULL;
-        free(vset);
-        vset = NULL;
         break;
     case bejArray:
         outputBejTupleToFile(tuple, output_file);
         varray = (bejArray_t *)tuple->bejV;
-        count = varray->count;
-        for (nnint_t i = 0; i < count; i++)
+        if(varray != NULL)
         {
-            bejtuple = &varray->tuples[i];
-            outputBejEncodeResult(bejtuple, output_file);
+            count = varray->count;
+            for (nnint_t i = 0; i < count; i++)
+            {
+                bejtuple = &varray->tuples[i];
+                outputBejEncodeResult(bejtuple, output_file);
+            }
+            free(varray->tuples);
+            varray->tuples = NULL;
+            free(varray);
+            varray = NULL;
         }
-        free(varray->tuples);
-        varray->tuples = NULL;
-        free(varray);
-        varray = NULL;
-        break;
-    case bejString:
-        outputBejTupleToFile(tuple, output_file);
-        free(tuple->bejV);
-        tuple->bejV = NULL;
         break;
     case bejEnum:
         outputBejTupleToFile(tuple, output_file);
@@ -582,16 +580,18 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
                 free(venum->name);
             free(venum);
         }
-            
-        
         break;
+    case bejString:
     case bejInteger:
     case bejBoolean:
     case bejNull:
     default:
         outputBejTupleToFile(tuple, output_file);
-        free((void *)tuple->bejV);
-        tuple->bejV = NULL;
+        if (tuple->bejV != NULL)
+        {
+            free((void *)tuple->bejV);
+            tuple->bejV = NULL;
+        }
         // TODO : the other BEJ type
         // bejBytesString
         // bejChoice
