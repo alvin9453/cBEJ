@@ -577,7 +577,7 @@ void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
         venum = (bejEnum_t *)tuple->bejV;
         if(venum != NULL){
             if (venum->name != NULL)
-                free(venum->name);
+                free((void *)venum->name);
             free(venum);
         }
         break;
