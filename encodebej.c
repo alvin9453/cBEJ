@@ -32,7 +32,7 @@ EntryInfo_t *find_entry_from_dictionary(char *name, EntryInfo_t *dict)
     EntryInfo_t *found_entry = NULL;
     for (uint16_t i = 0; i < dict->ChildCount; i++)
     {
-        if (strncmp(name, dict->ChildInfo[i]->Name, strnlen(name, MAX_PROPERTY_NAME_LENGTH) + 1) == 0)
+        if (strncmp(name, (const char*)dict->ChildInfo[i]->Name, strnlen(name, MAX_PROPERTY_NAME_LENGTH) + 1) == 0)
         {
             found_entry = dict->ChildInfo[i];
             break;
@@ -77,7 +77,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         if ((find_major_entry = find_entry_from_dictionary(json->string, major_dict)) != NULL)
         {
             bejS.seq = find_major_entry->SequenceNumber;
-            bejS.name = find_major_entry->Name;
+            bejS.name = (const char *)find_major_entry->Name;
             bejS.annot_flag = 0;
 
             bejF.bejtype = find_major_entry->bejtype;
@@ -85,7 +85,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         else if ((find_annotation_entry = find_entry_from_dictionary(json->string, annotation_dict)) != NULL)
         {
             bejS.seq = find_annotation_entry->SequenceNumber;
-            bejS.name = find_annotation_entry->Name;
+            bejS.name = (const char *)find_annotation_entry->Name;
             bejS.annot_flag = 1;
 
             bejF.bejtype = find_annotation_entry->bejtype;
@@ -370,7 +370,7 @@ void showTuple(BejTuple_t *tuple, int layer)
     switch (bejF->bejtype)
     {
     case bejSet:
-        printf(" - [%d] %s , \"bejSet\", L = %d \n", bejS->seq, bejS->name == "" ? "NOSHOW" : bejS->name, *bejL);
+        printf(" - [%d] %s , \"bejSet\", L = %d \n", bejS->seq, bejS->name[0] == 0 ? "NOSHOW" : bejS->name, *bejL);
         vset = (bejSet_t *)tuple->bejV;
         if (vset != NULL)
         {
@@ -480,7 +480,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
                         if(DEBUG)
                         {
                             printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
-                        } 
+                        }
 
                         for (nnint_t i = 0; i < count; i++)
                         {
@@ -557,7 +557,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
 
 void outputBejBasicToFile(FILE *output_file)
 {
-    BejBasic_t bej_basic = {.ver32 = BEJ_VERSION, .flags = 0, .schemaclass = 0}; 
+    BejBasic_t bej_basic = {.ver32 = BEJ_VERSION, .flags = 0, .schemaclass = 0};
     fwrite(&bej_basic, sizeof(bej_basic), 1, output_file);
 }
 
