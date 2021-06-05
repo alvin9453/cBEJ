@@ -443,9 +443,9 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
     bejArray_t *varray;
     bejEnum_t *venum;
     nnint_t count = 0;
-    uint8_t nnint_size = sizeof(nnint_t);
     nnint_t annotation_flag = bejS->annot_flag;
     nnint_t seq = bejS->seq << 1 | !!annotation_flag;
+    BejTuple_t *bejtuple;
 
     if (output_file != NULL)
     {
@@ -469,45 +469,82 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
         {
             switch (bejF->bejtype)
             {
-            case bejSet:
-                vset = (bejSet_t *)tuple->bejV;
-                count = vset->count;
+                case bejSet:
+                    vset = (bejSet_t *)tuple->bejV;
+                    if(vset != NULL)
+                    {
+                        count = vset->count;
 
-                write_nnint(count, output_file);
+                        write_nnint(count, output_file);
 
-                if(DEBUG)
-                {
-                    printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
-                } 
-                break;
-            case bejArray:
-                varray = (bejArray_t *)tuple->bejV;
-                count = varray->count;
+                        if(DEBUG)
+                        {
+                            printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
+                        } 
 
-                write_nnint(count, output_file);
-                if (DEBUG)
-                {
-                    printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
-                }
-                break;
-            case bejEnum:
-                venum = (bejEnum_t *)tuple->bejV;
-                write_nnint(venum->nnint, output_file);
+                        for (nnint_t i = 0; i < count; i++)
+                        {
+                            bejtuple = &vset->tuples[i];
+                            outputBejTupleToFile(bejtuple, output_file);
+                        }
+                        free(vset->tuples);
+                        vset->tuples = NULL;
+                        free(vset);
+                        vset = NULL;
+                    }
+                    break;
+                case bejArray:
+                    varray = (bejArray_t *)tuple->bejV;
+                    if(varray != NULL)
+                    {
+                        count = varray->count;
 
-                if (DEBUG)
-                {
-                    printf(" V = %02x %02x\n", get_nnint_len(venum->nnint), venum->nnint);
-                }
-                break;
-            case bejNull:
-                break;
-            default:
-                fwrite(tuple->bejV, 1, *bejL, output_file);
-                if (DEBUG)
-                {
-                    //printf(" V = %02x %06x\n", nnint_size, venum->nnint);
-                }
-                break;
+                        write_nnint(count, output_file);
+                        if (DEBUG)
+                        {
+                            printf(" V(count) = %02x %0*x\n",  get_nnint_len(count), get_nnint_len(count), count);
+                        }
+
+                        for (nnint_t i = 0; i < count; i++)
+                        {
+                            bejtuple = &varray->tuples[i];
+                            outputBejTupleToFile(bejtuple, output_file);
+                        }
+                        free(varray->tuples);
+                        varray->tuples = NULL;
+                        free(varray);
+                        varray = NULL;
+                    }
+                    break;
+                case bejEnum:
+                    venum = (bejEnum_t *)tuple->bejV;
+                    if(venum != NULL)
+                    {
+                        write_nnint(venum->nnint, output_file);
+
+                        if (DEBUG)
+                        {
+                            printf(" V = %02x %02x\n", get_nnint_len(venum->nnint), venum->nnint);
+                        }
+                        if (venum->name != NULL)
+                            free((void *)venum->name);
+                        free(venum);
+                    }
+                    break;
+                case bejNull:
+                    break;
+                default:
+                    if (tuple->bejV != NULL)
+                    {
+                        fwrite(tuple->bejV, 1, *bejL, output_file);
+                        if (DEBUG)
+                        {
+
+                        }
+                        free((void *)tuple->bejV);
+                        tuple->bejV = NULL;
+                    }
+                    break;
             }
         }else{
             if(DEBUG)
@@ -527,82 +564,7 @@ void outputBejBasicToFile(FILE *output_file)
 // Traverse all BEJ Tuples and output binary to files
 void outputBejEncodeResult(BejTuple_t *tuple, FILE *output_file)
 {
-    BejTupleS_t *bejS = &tuple->bejS;
-    BejTupleF_t *bejF = &tuple->bejF;
-    bejSet_t *vset;
-    bejArray_t *varray;
-    bejInteger_t *vinteger;
-    bejString_t *vstring;
-    bejBoolean_t *vbool;
-    bejEnum_t *venum;
-    nnint_t count;
-    BejTuple_t *bejtuple;
-
-    switch (bejF->bejtype)
-    {
-    case bejSet:
-        outputBejTupleToFile(tuple, output_file);
-        vset = (bejSet_t *)tuple->bejV;
-        if (vset != NULL)
-        {
-            count = vset->count;
-            for (nnint_t i = 0; i < count; i++)
-            {
-                bejtuple = &vset->tuples[i];
-                outputBejEncodeResult(bejtuple, output_file);
-            }
-            free(vset->tuples);
-            vset->tuples = NULL;
-            free(vset);
-            vset = NULL;
-        }
-        break;
-    case bejArray:
-        outputBejTupleToFile(tuple, output_file);
-        varray = (bejArray_t *)tuple->bejV;
-        if(varray != NULL)
-        {
-            count = varray->count;
-            for (nnint_t i = 0; i < count; i++)
-            {
-                bejtuple = &varray->tuples[i];
-                outputBejEncodeResult(bejtuple, output_file);
-            }
-            free(varray->tuples);
-            varray->tuples = NULL;
-            free(varray);
-            varray = NULL;
-        }
-        break;
-    case bejEnum:
-        outputBejTupleToFile(tuple, output_file);
-        venum = (bejEnum_t *)tuple->bejV;
-        if(venum != NULL){
-            if (venum->name != NULL)
-                free((void *)venum->name);
-            free(venum);
-        }
-        break;
-    case bejString:
-    case bejInteger:
-    case bejBoolean:
-    case bejNull:
-    default:
-        outputBejTupleToFile(tuple, output_file);
-        if (tuple->bejV != NULL)
-        {
-            free((void *)tuple->bejV);
-            tuple->bejV = NULL;
-        }
-        // TODO : the other BEJ type
-        // bejBytesString
-        // bejChoice
-        // bejPropertyAnnotation
-        // bejResourceLink
-        // bejResourceLinkExpansion
-        // bejReal
-        break;
-    }
+    outputBejTupleToFile(tuple, output_file);
 }
 
 BejTuple_t *encodeJsonToBinary(cJSON *json_input, EntryInfo_t *major_dict, EntryInfo_t *annotation_dict)
