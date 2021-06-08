@@ -415,32 +415,47 @@ FREEFUNC(BejTuple_t)
 SHOWFUNC(BejTuple_t)
 {
     //if(DEBUG) printf("in %s()..\n", __func__);
-    PRINT_LAYER(layer);
     BejTuple_t *tuple = data;
     BejTupleS_t *bejS = &tuple->bejS;
     BejTupleF_t *bejF = &tuple->bejF;
-    char bejbasicbuf[128];
-    
-    if(NULL==bejS->name) {
-        snprintf(bejbasicbuf, sizeof(bejbasicbuf),  "(seq=%s%u,%s%s,%u):",
-                bejS->annot_flag?"an":"", bejS->seq,
-                getBejtypeName(bejF->bejtype),
-                bejF->deferred_binding?"(def)":"", tuple->bejL); 
+
+    PRINT_LAYER(layer);
+    if (NULL == bejS->name)
+    {
+        printf("(seq=%s%u,%s%s,%u):",
+               bejS->annot_flag ? "an" : "", bejS->seq,
+               getBejtypeName(bejF->bejtype),
+               bejF->deferred_binding ? "(def)" : "", tuple->bejL);
     }
-    else if(!strncmp(bejS->name, NOSHOW, 10))
-        bejbasicbuf[0]=0;
-    else {
-        snprintf(bejbasicbuf, sizeof(bejbasicbuf),  "\"%s\":",bejS->name);
+    else if (!strncmp(bejS->name, NOSHOW, 10))
+        ;
+    else if (bejPropertyAnnotation == bejF->bejtype)
+    {
+        BejTupleS_t *childS = &((bejPropertyAnnotation_t *)tuple->bejV)->annotuple.bejS;
+        printf("\"%s%s\":", bejS->name, childS->name);
+    }
+    else
+    {
+        printf("\"%s\":", bejS->name);
     }
 
-    switch(bejF->bejtype)
+    if (0 == tuple->bejL)
     {
-#define TP(X) case X: \
-        printf("%s", bejbasicbuf);\
-        show##X##_t(tuple->bejV, layer+1);\
+        printf("null");
+        return;
+    }
+
+    switch (bejF->bejtype)
+    {
+#define TP(X)                                \
+    case X:                                  \
+        show##X##_t(tuple->bejV, layer + 1); \
         break;
         ALL_BEJTYPE(TP);
 #undef TP
+    default:
+        printf("unsupport bejtype %u", tuple->bejF.bejtype);
+        break;
     }
 }
 

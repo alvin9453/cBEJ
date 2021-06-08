@@ -55,6 +55,7 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
     bejInteger_t *vinteger;
     bejBoolean_t *vbool;
     bejEnum_t *venum;
+    bejString_t *vstring;
     BejTuple_t *varray_tuples_p;
     BejTuple_t *vset_tuples_p;
     BejTuple_t *packed_result;
@@ -171,8 +172,10 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
             break;
         case bejString:
             if(cJSON_IsString(json)) {
-                bejV = malloc(strlen(json->valuestring) + 1);
-                memcpy(bejV, (char *)json->valuestring, strlen(json->valuestring) + 1);
+                vstring = malloc(sizeof(bejString_t));
+                vstring->strbuf = malloc(strlen(json->valuestring) + 1);
+                memcpy(vstring->strbuf, (char *)json->valuestring, strlen(json->valuestring) + 1);
+                bejV = vstring;
             }
             else {
                 printf(" - !!!! [DEBUG] ERROR bejString should input Json array, current Json propert is \"%s\" \n", json->string?json->string:"");
@@ -307,7 +310,7 @@ nnint_t set_tuple_length(BejTuple_t *tuple)
     case bejString:
         vstring = (bejString_t *)tuple->bejV;
         if(vstring != NULL)
-            bejL = strlen((const char *)vstring) + 1;
+            bejL = strlen((const char *)vstring->strbuf) + 1;
         break;
     case bejInteger:
         vinteger = (bejInteger_t *)tuple->bejV;
@@ -442,6 +445,7 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
     bejSet_t *vset;
     bejArray_t *varray;
     bejEnum_t *venum;
+    bejString_t *vstring;
     nnint_t count = 0;
     nnint_t annotation_flag = bejS->annot_flag;
     nnint_t seq = bejS->seq << 1 | !!annotation_flag;
@@ -531,16 +535,21 @@ void outputBejTupleToFile(BejTuple_t *tuple, FILE *output_file)
                         free(venum);
                     }
                     break;
+                case bejString:
+                    vstring = (bejString_t *)tuple->bejV;
+                    if(vstring != NULL)
+                    {
+                        fwrite(vstring->strbuf, 1, *bejL, output_file);
+                        free(vstring->strbuf);
+                        free(vstring);
+                    }
+                    break;
                 case bejNull:
                     break;
                 default:
                     if (tuple->bejV != NULL)
                     {
                         fwrite(tuple->bejV, 1, *bejL, output_file);
-                        if (DEBUG)
-                        {
-
-                        }
                         free((void *)tuple->bejV);
                         tuple->bejV = NULL;
                     }
@@ -662,7 +671,7 @@ int main(int argc, char *argv[])
             {
                 if (DEBUG)
                 {
-                    showTuple(bej_tuple_list, 0);
+                    showBejTuple_t(bej_tuple_list, 0);
                 }
                 FILE *output_file = NULL;
 
