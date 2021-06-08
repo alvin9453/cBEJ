@@ -687,6 +687,7 @@ int main(int argc, char *argv[])
                 free(bej_tuple_list);
             }
         }
+        cJSON_Delete(cjson_input);
         if(errno != 0)
             printf(" [ERROR] Found there is an error, error no : %02x\n", errno);
     }
