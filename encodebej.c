@@ -173,8 +173,15 @@ BejTuple_t *pack_json_to_sfv(const cJSON *json, EntryInfo_t *major_dict, EntryIn
         case bejString:
             if(cJSON_IsString(json)) {
                 vstring = malloc(sizeof(bejString_t));
-                vstring->strbuf = malloc(strlen(json->valuestring) + 1);
-                memcpy(vstring->strbuf, (char *)json->valuestring, strlen(json->valuestring) + 1);
+                if (strncmp("@odata.id", json->string, strlen("@odata.id")) == 0)
+                {
+                    vstring->strbuf = strdup("%L");
+                }
+                else
+                {
+                    vstring->strbuf = malloc(strlen(json->valuestring) + 1);
+                    memcpy(vstring->strbuf, (char *)json->valuestring, strlen(json->valuestring) + 1);
+                }
                 bejV = vstring;
             }
             else {
